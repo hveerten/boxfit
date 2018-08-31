@@ -1,0 +1,29 @@
+////////////////////////////////////////////////////////////////////////////////
+//
+// flux.cpp
+//
+// Created, July 2 2014, by HJvE
+// Last Modified, July 2, 2014 by HJvE
+//
+// - Provides base class structure for flux calculation routines. This is then
+// inherited by flux_from_box, flux_from_grid etc, which include the additional
+// layer with specifics for given sources of fluid information.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+#include "flux.h"
+
+////////////////////////////////////////////////////////////////////////////////
+
+c_flux :: ~c_flux()
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void c_flux :: set_observer_pointer(c_observer *p_Obs_arg)
+{
+  p_Obs = p_Obs_arg;
+  eds.p_Obs = p_Obs_arg;
+  emab.p_Obs = p_Obs_arg;
+}
