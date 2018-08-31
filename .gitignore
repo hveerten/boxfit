@@ -1,0 +1,8 @@
+# files to ignore by git
+src/*.o
+
+# some files and directories that are likely to be locally created or generated
+doc
+data/box*
+output
+

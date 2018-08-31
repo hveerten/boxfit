@@ -1,0 +1,72 @@
+################################################################################
+#
+# boxfit Makefile
+#
+# Created Jan 10, 2012 by HJvE
+# Last modified July 29, 2016 by HJvE
+#
+################################################################################
+
+# intel compiler for serial version:
+#CXX = icpc
+
+# intel compiler for parallel version:
+#CXX = mpicxx
+
+# GNU compiler serial
+#CXX = g++
+
+# GNU compiler parallel
+CXX = mpic++
+
+# Linker flags:
+LDFLAGS = -L -L/usr/lib -lm -lhdf5 -lgomp
+  # -L is directory with libraries, there exists a file libm.sl etc.
+
+# Compiler flags
+CPPFLAGS = -I/usr/include/mpi -Wall -O0 -g -fopenmp
+#CPPFLAGS = -I/usr/include/mpi -Wall -O3 -march=native -mtune=native
+  # -Wall all warnings on
+  # -O3 Optimization level 3 ( -O0 needed for debugging purposes )
+  # ad -g to compile for debugging purposes. Debug code using valgrind
+  # -fopenmp enable openMP features
+  # -march=native and -mtune=native perform processor-specific optimization
+
+################################################################################
+
+SOURCE  = box.cpp boxfit.cpp BM.cpp \
+  coords.cpp dump_box \
+  eds_2D_regular.cpp eds_IO_2D.cpp \
+  eds_IO_2D_regular.cpp extramath.cpp fluid.cpp fluid_special.cpp \
+  numerical.cpp param_IO.cpp \
+  parse.cpp physics.cpp radiation.cpp
+
+OBJECTS = ${SOURCE:.cpp=.o}                           
+
+################################################################################
+
+BOXFIT_O = BM.o box.o boxfit.o coords.o eds_IO_2D_regular.o eds_2D_regular.o \
+  extramath.o fluid.o fluid_special.o flux.o flux_from_box.o numerical.o \
+  observer.o param_IO.o parse.o physics.o radiation.o
+
+DUMP_BOX_O = BM.o coords.o dump_box.o box.o fluid.o extramath.o \
+  parse.o physics.o
+
+################################################################################
+
+.c.o: ${SOURCE}
+	${CXX} -c ${CPPFLAGS} $<                             
+
+boxfit: ${BOXFIT_O}
+	${CXX} -o ../bin/$@ ${BOXFIT_O} ${LDFLAGS}
+	cp ../bin/$@ $(HOME)/bin
+
+dump_box: ${DUMP_BOX_O}
+	${CXX} -o ../bin/$@ ${DUMP_BOX_O} ${LDFLAGS}
+	cp ../bin/$@ $(HOME)/bin
+
+all: boxfit dump_box
+
+clean:                                                
+	rm -f *.o
+
