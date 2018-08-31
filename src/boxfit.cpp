@@ -899,7 +899,8 @@ void c_boxfit :: lightcurve()
   prepare();
 
   //----------------------------------------------------------------------------
-  // calculate the actual light curve for serial computation
+  // calculate the actual light curve for serial computation, using openMP if
+  // available
 
   #if OPEN_MPI_ == DISABLED_
 

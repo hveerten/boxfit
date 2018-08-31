@@ -198,9 +198,6 @@ c_eds :: ~c_eds()
     //--------------------------------------------------------------------------
     // apply em and ab
   
-    #if OPEN_MPI_ == DISABLED_
-    #pragma omp parallel for private(iuphi, tau, expo, S)
-    #endif
     for (iur = 0; iur <= ur_rays; iur++)
     {
       for (iuphi = 0; iuphi <= uphi_rays; iuphi++)
@@ -341,9 +338,6 @@ c_eds :: ~c_eds()
     int iur, iuphi;
     double Iold;
 
-    #if OPEN_MPI_ == DISABLED_
-    #pragma omp parallel for private(iuphi, Iold)
-    #endif
     for (iur = 0; iur < ur_rays; iur++)
     {
       for (iuphi = 0; iuphi < uphi_rays; iuphi++)

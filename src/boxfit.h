@@ -112,7 +112,6 @@ class c_boxfit
       // frequency
     double nu_0, nu_1; // starting and stopping frequency (Hz)
     double t_0, t_1; // starting and stopping time (s)
-    // double d_L, z; // observer luminosity distance and redshift
     int no_points; // how many data points in the light curve / spectrum
     double *fluxes; // array containing the results from light curve / spectrum
 

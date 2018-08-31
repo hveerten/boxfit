@@ -3,7 +3,6 @@
 # boxfit Makefile
 #
 # Created Jan 10, 2012 by HJvE
-# Last modified July 29, 2016 by HJvE
 #
 ################################################################################
 
@@ -20,12 +19,13 @@
 CXX = mpic++
 
 # Linker flags:
-LDFLAGS = -L -L/usr/lib -lm -lhdf5 -lgomp
+#LDFLAGS = -L -L/usr/lib -lm -lhdf5_openmpi -lgomp
+LDFLAGS = -L -L/usr/lib -lm -lhdf5_serial -lgomp
   # -L is directory with libraries, there exists a file libm.sl etc.
 
 # Compiler flags
-CPPFLAGS = -I/usr/include/mpi -Wall -O0 -g -fopenmp
-#CPPFLAGS = -I/usr/include/mpi -Wall -O3 -march=native -mtune=native
+#CPPFLAGS = -I/usr/include/mpi -I/usr/include/hdf5/openmpi -Wall -O3 -march=native -mtune=native -fopenmp
+CPPFLAGS = -I/usr/include/mpi -I/usr/include/hdf5/serial -Wall -O3 -march=native -mtune=native -fopenmp
   # -Wall all warnings on
   # -O3 Optimization level 3 ( -O0 needed for debugging purposes )
   # ad -g to compile for debugging purposes. Debug code using valgrind
@@ -59,11 +59,9 @@ DUMP_BOX_O = BM.o coords.o dump_box.o box.o fluid.o extramath.o \
 
 boxfit: ${BOXFIT_O}
 	${CXX} -o ../bin/$@ ${BOXFIT_O} ${LDFLAGS}
-	cp ../bin/$@ $(HOME)/bin
 
 dump_box: ${DUMP_BOX_O}
 	${CXX} -o ../bin/$@ ${DUMP_BOX_O} ${LDFLAGS}
-	cp ../bin/$@ $(HOME)/bin
 
 all: boxfit dump_box
 
