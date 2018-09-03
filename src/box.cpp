@@ -541,7 +541,7 @@ double c_box :: get_var(int vartype, int i_r, int i_theta, int i_t)
 {
   double aux, x;
   double Sn;
-  int i = i_t + ; // index entry mapped onto 1D array
+  int i = i_r + thetares * (i_theta + tres * i_t);
   
   // compute rescale factor for mass densities (pressure and energy density
   // scale in the same way, since cm / s is not affected by the rescaling).
@@ -557,7 +557,7 @@ double c_box :: get_var(int vartype, int i_r, int i_theta, int i_t)
       return eint[i_r][i_theta][i_t] * Sn;
     case rho_: 
       if (i_r < 0) return n * m_p;
-      return dens[i_r][i_theta][i_t] * Sn;
+      return dens[i] * Sn;
     case p_:
       if (version < 2.) return -1.;
       if (i_r < 0) return 1e-10 * n * m_p * v_light * v_light;
@@ -853,6 +853,8 @@ void c_box :: set_local(s_coordinates cor)
 // jet or counter-jet (if enabled)
 {
   int i_r, i_theta; // box indices
+  int i_cur; // flattened index lower bracketing time
+  int i_next; // flattened index one time step up
   
   bool use_BM = false;
   bool use_BOX = false;
@@ -961,6 +963,9 @@ void c_box :: set_local(s_coordinates cor)
           // set local variables, interpolated values drawn from snapshots
           local[rho_] = (1. - fract) * dens_ctr[i_r][i_theta][i_t_cur] +
             fract * dens_ctr[i_r][i_theta][i_t_cur + 1];
+            
+          local[rho_  
+            
           local[rho_] *= Sn;
 
           local[eint_] = (1. - fract) * eint_ctr[i_r][i_theta][i_t_cur] +
@@ -1011,9 +1016,14 @@ void c_box :: set_local(s_coordinates cor)
       return;
     }
 
+    //i_cur = i_r + thetares * (i_theta + tres * i_t_cur); // flattened index
+    //i_next = i_r + thetares * (i_theta + tres * (i_t_cur + 1)); // same
+   
+    i_cur = i_t_cur + i_r * thetares * tres + i_theta * tres;
+    i_next = i_t_cur + 1 + i_r * thetares * tres + i_theta * tres;
+    
     // set local variables, interpolated values drawn from snapshots
-    local[rho_] = (1. - fract) * dens[i_r][i_theta][i_t_cur] +
-      fract * dens[i_r][i_theta][i_t_cur + 1];
+    local[rho_] = (1. - fract) * dens[i_cur] + fract * dens[i_next];
     local[rho_] *= Sn;
 
     local[eint_] = (1. - fract) * eint[i_r][i_theta][i_t_cur] +
