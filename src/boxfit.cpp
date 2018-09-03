@@ -3,7 +3,6 @@
 // boxfit.cpp
 //
 // Created, Jun 28 2011, by HJvE
-// Last Modified July 2016 by HJvE
 //
 //
 // Reference: van Eerten, van der Horst & MacFadyen 2012, ApJ 749, 44

@@ -211,7 +211,9 @@ void c_box :: load(const char* filename)
   // assign memory, based on box resolution
 
   pres = array_3d<double>(Rres, thetares, tres);
-  dens = array_3d<double>(Rres, thetares, tres);
+  //dens = array_3d<double>(Rres, thetares, tres);
+  dens = new double[Rres * thetares * tres];
+
   eint = array_3d<double>(Rres, thetares, tres);
   velr = array_3d<double>(Rres, thetares, tres);
   veltheta = array_3d<double>(Rres, thetares, tres);
@@ -378,8 +380,9 @@ void c_box :: load(const char* filename)
   
   dataset = H5Dopen1(h5_fid, "dens");
   dataspace = H5Dget_space(dataset);
-  H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
-    &dens[0][0][0]);
+  //H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
+  //  &dens[0][0][0]);
+  H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, dens);
   H5Dclose(dataset);
   H5Sclose(dataspace);
 
@@ -479,7 +482,8 @@ void c_box :: close()
   {
     // release memory
     delete_array_3d(pres);
-    delete_array_3d(dens);
+    //delete_array_3d(dens);
+    delete[](dens);
     delete_array_3d(eint);
     delete_array_3d(velr);
     delete_array_3d(veltheta);
@@ -537,6 +541,7 @@ double c_box :: get_var(int vartype, int i_r, int i_theta, int i_t)
 {
   double aux, x;
   double Sn;
+  int i = i_t + ; // index entry mapped onto 1D array
   
   // compute rescale factor for mass densities (pressure and energy density
   // scale in the same way, since cm / s is not affected by the rescaling).

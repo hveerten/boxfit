@@ -50,7 +50,8 @@ class c_box : public c_fluid
   
   double version; // version number of BOX data
 
-  double ***dens, ***eint, ***velr; // fluid quantities at each R, theta, time
+  double ***eint, ***velr; // fluid quantities at each R, theta, time
+  double *dens; // fluid quantities at each R, theta, time
   double ***veltheta, ***pres;
   double *theta_max; // outer theta boundaries at each time
   double **R_max; // outer radius boundaries at each theta, time
