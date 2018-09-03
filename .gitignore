@@ -1,6 +1,6 @@
 # files to ignore by git
 src/*.o
-src/makefile # this is a local makefile, adapted from the template provided
+src/makefile
 bin
 
 # some files and directories that are likely to be locally created or generated
