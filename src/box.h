@@ -50,27 +50,33 @@ class c_box : public c_fluid
   
   double version; // version number of BOX data
 
-  double ***eint, ***velr; // fluid quantities at each R, theta, time
+  double *eint, *velr; // fluid quantities at each R, theta, time
   double *dens; // fluid quantities at each R, theta, time
-  double ***veltheta, ***pres;
+  double *veltheta, *pres;
   double *theta_max; // outer theta boundaries at each time
   double **R_max; // outer radius boundaries at each theta, time
   double **R_peak; // peak positions at each theta, time
-  double ***r; // lower radial cell boundary at each radius, theta, time
-  double ***dr; // cell widths
+  double *r; // lower radial cell boundary at each radius, theta, time
+  double *dr; // cell widths
   double *t; // grid snapshot times
+
+  #if OPEN_MPI_ == ENABLED_
+    // dynamic RMA windows for shared memory allocation
+    MPI_Win denswin, eintwin, velrwin, velthetawin, preswin;
+    MPI_Win rwin, drwin;
+  #endif
 
   #if BOOST_ == ENABLED_
   
     // fluid quantities for the counterjet, if included on the grid
-    double ***dens_ctr, ***eint_ctr, ***velr_ctr;
-    double ***veltheta_ctr, ***pres_ctr;
+    double *dens_ctr, *eint_ctr, *velr_ctr;
+    double *veltheta_ctr, *pres_ctr;
 
     double *theta_max_ctr; // outer theta boundaries at each time
     double **R_max_ctr; // outer radius boundaries at each theta, time
     double **R_peak_ctr; // peak tau radius at each theta, time
-    double ***r_ctr; // radial positions
-    double ***dr_ctr; // cell widths
+    double *r_ctr; // radial positions
+    double *dr_ctr; // cell widths
 
   #endif
 

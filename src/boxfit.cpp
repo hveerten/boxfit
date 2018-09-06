@@ -15,8 +15,14 @@
 // global variables
 
 int numprocs; // stores the number of processors used for this run
-int myid; // identity of single processor
+int myid; // identity of single processor, 0 for non-parallel run
 c_boxfit *p_boxfit; // pointer to boxfit class for external fit function wrapper
+
+#if OPEN_MPI_ == ENABLED_
+  int noderank; // identity of single core within node
+  int nodesize;
+  MPI_Comm nodecom;
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -3428,10 +3434,17 @@ int main(int argc, char* argv[])
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
     MPI_Barrier(MPI_COMM_WORLD); // wait until all cores have caught up
 
+    // get node-specific information
+    MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, myid,
+      MPI_INFO_NULL, &nodecom);
+
+    MPI_Comm_size(nodecom, &nodesize);
+    MPI_Comm_rank(nodecom, &noderank);
+  
   #endif // PARALELL_
   #if OPEN_MPI_ == DISABLED_
 
-    numprocs = 1; myid = 0;
+    numprocs = 1; myid = 0; noderank = 0;
 
   #endif // PARALELL_
 

@@ -12,6 +12,17 @@
 #include "box.h"
 
 ////////////////////////////////////////////////////////////////////////////////
+// global variables
+
+#if OPEN_MPI_ == ENABLED_
+  // these variables should have been declared as global variables in the main
+  // program
+  extern int noderank; // identity of single core within node
+  extern int nodesize;
+  extern MPI_Comm nodecom;
+#endif
+
+////////////////////////////////////////////////////////////////////////////////
 // static member declarations
 
 c_box* c_multibox :: box;
@@ -44,6 +55,13 @@ c_box :: ~c_box()
 void c_box :: load(const char* filename)
 {
   hid_t dataset, dataspace;
+  
+  #if OPEN_MPI_ == ENABLED_
+    MPI_Aint size;
+    MPI_Aint localsize; // only noderank 0 gets to allocate the full array
+    int size_disp;
+  #endif
+  
   #if BOOST_ == ENABLED_
     int i_counterjet; // counterjet flag. 1 or 0 in file, stored as bool in code 
   #endif
@@ -210,16 +228,68 @@ void c_box :: load(const char* filename)
   //----------------------------------------------------------------------------
   // assign memory, based on box resolution
 
-  pres = array_3d<double>(Rres, thetares, tres);
-  //dens = array_3d<double>(Rres, thetares, tres);
-  dens = new double[Rres * thetares * tres];
+  #if OPEN_MPI_ == ENABLED_
+    if (noderank == 0)
+    {
+      size = Rres * thetares * tres;
+      localsize = size;
+    }
+    else
+      localsize = 0;
 
-  eint = array_3d<double>(Rres, thetares, tres);
-  velr = array_3d<double>(Rres, thetares, tres);
-  veltheta = array_3d<double>(Rres, thetares, tres);
+    // allocate shared window
+    if (H5Lexists(h5_fid, "pres", H5P_DEFAULT))
+      MPI_Win_allocate_shared(localsize*sizeof(double), sizeof(double),
+        MPI_INFO_NULL, nodecom, &pres, &preswin);
+    MPI_Win_allocate_shared(localsize*sizeof(double), sizeof(double),
+      MPI_INFO_NULL, nodecom, &dens, &denswin);
+    MPI_Win_allocate_shared(localsize*sizeof(double), sizeof(double),
+      MPI_INFO_NULL, nodecom, &eint, &eintwin);
+    MPI_Win_allocate_shared(localsize*sizeof(double), sizeof(double),
+      MPI_INFO_NULL, nodecom, &velr, &velrwin);
+    MPI_Win_allocate_shared(localsize*sizeof(double), sizeof(double),
+      MPI_INFO_NULL, nodecom, &veltheta, &velthetawin);
+
+    MPI_Win_allocate_shared(localsize*sizeof(double), sizeof(double),
+      MPI_INFO_NULL, nodecom, &r, &rwin);
+    MPI_Win_allocate_shared(localsize*sizeof(double), sizeof(double),
+      MPI_INFO_NULL, nodecom, &dr, &drwin);
+
+    // tell cores not of top rank in their respective node where to find data
+
+    if (noderank != 0)
+    {
+      if (H5Lexists(h5_fid, "pres", H5P_DEFAULT))
+        MPI_Win_shared_query(preswin, 0, &size, &size_disp, &pres);
   
-  r = array_3d<double>(Rres, thetares, tres);
-  dr = array_3d<double>(Rres, thetares, tres);
+      MPI_Win_shared_query(denswin, 0, &size, &size_disp, &dens);
+      MPI_Win_shared_query(eintwin, 0, &size, &size_disp, &eint);
+      MPI_Win_shared_query(velrwin, 0, &size, &size_disp, &velr);
+      MPI_Win_shared_query(velthetawin, 0, &size, &size_disp, &veltheta);
+
+      MPI_Win_shared_query(rwin, 0, &size, &size_disp, &r);
+      MPI_Win_shared_query(drwin, 0, &size, &size_disp, &dr);
+    }
+
+  #endif
+  #if OPEN_MPI_ == DISABLED_
+    if (H5Lexists(h5_fid, "pres", H5P_DEFAULT))
+      pres = new double[Rres * thetares * tres];
+    
+    dens = new double[Rres * thetares * tres];
+    eint = new double[Rres * thetares * tres];
+    velr = new double[Rres * thetares * tres];
+    veltheta = new double[Rres * thetares * tres];
+  
+    r = new double[Rres * thetares * tres];
+    dr = new double[Rres * thetares * tres];
+  #endif
+
+
+  // TO DO: ERROR CHECKING WHETHER THE RIGHT MPI CAPABILITIES ARE THERE
+  // TO DO: CONFIRM NO MEMORY LEAKS WITH DEBUGGING TOOLS
+
+  
   theta_max = array_1d<double>(tres); // outer theta boundaries at each time
   t = array_1d<double>(tres);
   R_max = array_2d<double>(thetares, tres);
@@ -234,14 +304,15 @@ void c_box :: load(const char* filename)
     if (counterjet)
     {
       // if there is a counterjet, assign memory
-      pres_ctr = array_3d<double>(Rres, thetares, tres);
-      dens_ctr = array_3d<double>(Rres, thetares, tres);
-      eint_ctr = array_3d<double>(Rres, thetares, tres);
-      velr_ctr = array_3d<double>(Rres, thetares, tres);
-      veltheta_ctr = array_3d<double>(Rres, thetares, tres);
-  
-      r_ctr = array_3d<double>(Rres, thetares, tres);
-      dr_ctr = array_3d<double>(Rres, thetares, tres);
+      pres_ctr = new double[Rres * thetares * tres];
+      dens_ctr = new double[Rres * thetares * tres];
+      eint_ctr = new double[Rres * thetares * tres];
+      velr_ctr = new double[Rres * thetares * tres];
+      veltheta_ctr = new double[Rres * thetares * tres];
+
+      r_ctr = new double[Rres * thetares * tres];
+      dr_ctr = new double[Rres * thetares * tres];
+
       theta_max_ctr = array_1d<double>(tres);
       R_max_ctr = array_2d<double>(thetares, tres);
       R_peak_ctr = array_2d<double>(thetares, tres);
@@ -292,24 +363,26 @@ void c_box :: load(const char* filename)
   H5Sclose(dataspace);
 
   //----------------------------------------------------------------------------
-  // load dr
   
-  dataset = H5Dopen1(h5_fid, "dr");
-  dataspace = H5Dget_space(dataset);
-  H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
-    &dr[0][0][0]);
-  H5Dclose(dataset);
-  H5Sclose(dataspace);
+  if (noderank == 0)
+  {
+    // load dr
+  
+    dataset = H5Dopen1(h5_fid, "dr");
+    dataspace = H5Dget_space(dataset);
+    H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, dr);
+    H5Dclose(dataset);
+    H5Sclose(dataspace);
 
-  //----------------------------------------------------------------------------
-  // load r
+    //--------------------------------------------------------------------------
+    // load r
   
-  dataset = H5Dopen1(h5_fid, "r");
-  dataspace = H5Dget_space(dataset);
-  H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
-    &r[0][0][0]);
-  H5Dclose(dataset);
-  H5Sclose(dataspace);
+    dataset = H5Dopen1(h5_fid, "r");
+    dataspace = H5Dget_space(dataset);
+    H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, r);
+    H5Dclose(dataset);
+    H5Sclose(dataspace);
+  }
 
   //----------------------------------------------------------------------------
   
@@ -349,7 +422,7 @@ void c_box :: load(const char* filename)
       dataset = H5Dopen1(h5_fid, "dr_ctr");
       dataspace = H5Dget_space(dataset);
       H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
-        &dr_ctr[0][0][0]);
+        dr_ctr);
       H5Dclose(dataset);
       H5Sclose(dataspace);
 
@@ -358,7 +431,7 @@ void c_box :: load(const char* filename)
       dataset = H5Dopen1(h5_fid, "r_ctr");
       dataspace = H5Dget_space(dataset);
       H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
-        &r_ctr[0][0][0]);
+        r_ctr);
       H5Dclose(dataset);
       H5Sclose(dataspace);
     }
@@ -370,55 +443,55 @@ void c_box :: load(const char* filename)
     
   dataset = H5Dopen1(h5_fid, "eint");
   dataspace = H5Dget_space(dataset);
-  H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
-    &eint[0][0][0]);
+  H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, eint);
   H5Dclose(dataset);
   H5Sclose(dataspace);
 
   //----------------------------------------------------------------------------
-  // load dens (comoving frame density)
   
-  dataset = H5Dopen1(h5_fid, "dens");
-  dataspace = H5Dget_space(dataset);
-  //H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
-  //  &dens[0][0][0]);
-  H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, dens);
-  H5Dclose(dataset);
-  H5Sclose(dataspace);
-
-  //----------------------------------------------------------------------------
-  // load v_r
-  
-  dataset = H5Dopen1(h5_fid, "velr");
-  dataspace = H5Dget_space(dataset);
-  H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
-    &velr[0][0][0]);
-  H5Dclose(dataset);
-  H5Sclose(dataspace);
-
-  //----------------------------------------------------------------------------
-  // load v_theta
-  
-  dataset = H5Dopen1(h5_fid, "veltheta");
-  dataspace = H5Dget_space(dataset);
-  H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
-    &veltheta[0][0][0]);
-  H5Dclose(dataset);
-  H5Sclose(dataspace);
-
-  //----------------------------------------------------------------------------
-  // load pres
-  
-  if (H5Lexists(h5_fid, "pres", H5P_DEFAULT))
+  if (noderank == 0)
   {
-    dataset = H5Dopen1(h5_fid, "pres");
+    // load dens (comoving frame density)
+
+    dataset = H5Dopen1(h5_fid, "dens");
     dataspace = H5Dget_space(dataset);
-    H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
-      &pres[0][0][0]);
+    H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, dens);
     H5Dclose(dataset);
     H5Sclose(dataspace);
-  }
   
+    //--------------------------------------------------------------------------
+    // load v_r
+  
+    dataset = H5Dopen1(h5_fid, "velr");
+    dataspace = H5Dget_space(dataset);
+    H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, velr);
+    H5Dclose(dataset);
+    H5Sclose(dataspace);
+
+    //--------------------------------------------------------------------------
+  // load v_theta
+  
+    dataset = H5Dopen1(h5_fid, "veltheta");
+    dataspace = H5Dget_space(dataset);
+    H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
+      veltheta);
+    H5Dclose(dataset);
+    H5Sclose(dataspace);
+
+    //--------------------------------------------------------------------------
+    // load pres
+  
+    if (H5Lexists(h5_fid, "pres", H5P_DEFAULT))
+    {
+      dataset = H5Dopen1(h5_fid, "pres");
+      dataspace = H5Dget_space(dataset);
+      H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT,
+        pres); 
+      H5Dclose(dataset);
+      H5Sclose(dataspace);
+    }
+  }
+
   //----------------------------------------------------------------------------
   
   #if BOOST_ == ENABLED_
@@ -430,7 +503,7 @@ void c_box :: load(const char* filename)
       dataset = H5Dopen1(h5_fid, "pres_ctr");
       dataspace = H5Dget_space(dataset);
       H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
-        &pres_ctr[0][0][0]);
+        pres_ctr);
       H5Dclose(dataset);
       H5Sclose(dataspace);
 
@@ -439,7 +512,7 @@ void c_box :: load(const char* filename)
       dataset = H5Dopen1(h5_fid, "eint_ctr");
       dataspace = H5Dget_space(dataset);
       H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
-        &eint_ctr[0][0][0]);
+        eint_ctr);
       H5Dclose(dataset);
       H5Sclose(dataspace);
 
@@ -448,7 +521,7 @@ void c_box :: load(const char* filename)
       dataset = H5Dopen1(h5_fid, "dens_ctr");
       dataspace = H5Dget_space(dataset);
       H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
-        &dens_ctr[0][0][0]);
+        dens_ctr);
       H5Dclose(dataset);
       H5Sclose(dataspace);
 
@@ -457,7 +530,7 @@ void c_box :: load(const char* filename)
       dataset = H5Dopen1(h5_fid, "velr_ctr");
       dataspace = H5Dget_space(dataset);
       H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
-        &velr_ctr[0][0][0]);
+        velr_ctr);
       H5Dclose(dataset);
       H5Sclose(dataspace);
 
@@ -466,7 +539,7 @@ void c_box :: load(const char* filename)
       dataset = H5Dopen1(h5_fid, "veltheta_ctr");
       dataspace = H5Dget_space(dataset);
       H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
-        &veltheta_ctr[0][0][0]);
+        veltheta_ctr);
       H5Dclose(dataset);
       H5Sclose(dataspace);
     }
@@ -481,17 +554,27 @@ void c_box :: close()
   if (box_allocated)
   {
     // release memory
-    delete_array_3d(pres);
-    //delete_array_3d(dens);
-    delete[](dens);
-    delete_array_3d(eint);
-    delete_array_3d(velr);
-    delete_array_3d(veltheta);
+    #if OPEN_MPI_ == DISABLED_
+      if (version >= 2.) delete[] pres;
+      delete[] dens;
+      delete[] eint;
+      delete[] velr;
+      delete[] veltheta;
+      delete[] r;
+      delete[] dr;
+    #endif
+    #if OPEN_MPI_ == ENABLED_
+      if (version >= 1.999) MPI_Win_free(&preswin);
+      MPI_Win_free(&denswin);
+      MPI_Win_free(&eintwin);
+      MPI_Win_free(&velrwin);
+      MPI_Win_free(&velthetawin);
+      MPI_Win_free(&rwin);
+      MPI_Win_free(&drwin);
+    #endif
 
     delete_array_1d(t);
   
-    delete_array_3d(r);
-    delete_array_3d(dr);
     delete_array_1d(theta_max);
     delete_array_2d(R_max);
     delete_array_2d(R_peak);
@@ -503,14 +586,15 @@ void c_box :: close()
   
       if (counterjet)
       {
-        delete_array_3d(pres_ctr);
-        delete_array_3d(dens_ctr);
-        delete_array_3d(eint_ctr);
-        delete_array_3d(velr_ctr);
-        delete_array_3d(veltheta_ctr);
-  
-        delete_array_3d(r_ctr);
-        delete_array_3d(dr_ctr);
+        delete[] pres_ctr;
+        delete[] dens_ctr;
+        delete[] eint_ctr;
+        delete[] velr_ctr;
+        delete[] veltheta_ctr;
+
+        delete[] r_ctr;
+        delete[] dr_ctr;
+        
         delete_array_1d(theta_max_ctr);
         delete_array_2d(R_max_ctr);
         delete_array_2d(R_peak_ctr);
@@ -541,7 +625,7 @@ double c_box :: get_var(int vartype, int i_r, int i_theta, int i_t)
 {
   double aux, x;
   double Sn;
-  int i = i_r + thetares * (i_theta + tres * i_t);
+  int i = i_t + i_r * thetares * tres + i_theta * tres; // flattened index
   
   // compute rescale factor for mass densities (pressure and energy density
   // scale in the same way, since cm / s is not affected by the rescaling).
@@ -554,24 +638,23 @@ double c_box :: get_var(int vartype, int i_r, int i_theta, int i_t)
   {
     case eint_: 
       if (i_r < 0) return 1e-10 * n * m_p * v_light * v_light;
-      return eint[i_r][i_theta][i_t] * Sn;
+      return eint[i] * Sn;
     case rho_: 
       if (i_r < 0) return n * m_p;
       return dens[i] * Sn;
     case p_:
       if (version < 2.) return -1.;
       if (i_r < 0) return 1e-10 * n * m_p * v_light * v_light;
-      return pres[i_r][i_theta][i_t] * Sn;    
+      return pres[i] * Sn;    
     case v_x_: 
       if (i_r < 0) return 0.0;
-      return velr[i_r][i_theta][i_t];
+      return velr[i];
     case v_y_: 
       if (i_r < 0) return 0.0;
-      return veltheta[i_r][i_theta][i_t];
+      return veltheta[i];
     case lfac_: 
       if (i_r < 0) return 1.0;
-      aux = (1.0 - velr[i_r][i_theta][i_t] * velr[i_r][i_theta][i_t] - 
-        veltheta[i_r][i_theta][i_t] * veltheta[i_r][i_theta][i_t]);
+      aux = (1.0 - velr[i] * velr[i] - veltheta[i] * veltheta[i]);
       if (aux < 0.0) aux = 1e-20;
       x = sqrt(1.0 / aux);
       return x;
@@ -594,6 +677,7 @@ double c_box :: get_var(int vartype, int i_r, int i_theta, int i_t)
     // stored in separate BOX data.
     double aux, x;
     double Sn;
+    int i = i_t + i_r * thetares * tres + i_theta * tres; // flattened index
   
     if (k == 0)  
       Sn = n / n_actual;
@@ -604,23 +688,22 @@ double c_box :: get_var(int vartype, int i_r, int i_theta, int i_t)
     {
       case eint_: 
         if (i_r < 0) return 1e-10 * n * m_p * v_light * v_light;
-        return eint_ctr[i_r][i_theta][i_t] * Sn;
+        return eint_ctr[i] * Sn;
       case rho_: 
         if (i_r < 0) return n * m_p;
-          return dens_ctr[i_r][i_theta][i_t] * Sn;
+        return dens_ctr[i] * Sn;
       case p_:
         if (i_r < 0) return 1e-10 * n * m_p * v_light * v_light;
-          return pres_ctr[i_r][i_theta][i_t] * Sn;    
+        return pres_ctr[i] * Sn;    
       case v_x_: 
         if (i_r < 0) return 0.0;
-          return velr_ctr[i_r][i_theta][i_t];
+        return velr_ctr[i];
       case v_y_: 
         if (i_r < 0) return 0.0;
-          return veltheta_ctr[i_r][i_theta][i_t];
+        return veltheta_ctr[i];
       case lfac_: 
         if (i_r < 0) return 1.0;
-          aux = (1. - velr_ctr[i_r][i_theta][i_t] * velr_ctr[i_r][i_theta][i_t] 
-            -veltheta_ctr[i_r][i_theta][i_t] * veltheta_ctr[i_r][i_theta][i_t]);
+        aux = (1. - velr_ctr[i]*velr_ctr[i] - veltheta_ctr[i]*veltheta_ctr[i]);
         if (aux < 0.0) aux = 1e-20;
           x = sqrt(1.0 / aux);
           return x;
@@ -644,6 +727,7 @@ void c_box :: find_cell_mix(double a_r, double a_theta, int &cr, int &ctheta)
   bool found; // true if correct radial index number found
   int cL, cM, cR; // auxiliary variables for computing radial index number
   double r0, r1; // lower and upper interpolated radial cell boundaries
+  int i_cur, i_next; // flattened indices
   
   // find theta index first
   if (a_theta >= theta_max_cur)
@@ -669,16 +753,20 @@ void c_box :: find_cell_mix(double a_r, double a_theta, int &cr, int &ctheta)
   found = false;
   cL = 0; cR = Rres - 1;
   
-  r1 = (r[cL][ctheta][i_t_cur] + dr[cL][ctheta][i_t_cur]) * (1. - fract) +  
-    (r[cL][ctheta][i_t_cur + 1] + dr[cL][ctheta][i_t_cur + 1]) * fract;
+  i_cur = i_t_cur + cL * thetares * tres + ctheta * tres;
+  i_next = i_t_cur + 1 + cL * thetares * tres + ctheta * tres;
+  
+  r1 = (r[i_cur] + dr[i_cur]) * (1. - fract) + (r[i_next] + dr[i_next]) * fract;
   if (r1 > a_r_base)
   {
     cr = 0; found = true;
   }
   else
   {
-    r0 = r[cR][ctheta][i_t_cur] * (1. - fract) + 
-      r[cR][ctheta][i_t_cur + 1] * fract;
+    i_cur = i_t_cur + cR * thetares * tres + ctheta * tres;
+    i_next = i_t_cur + 1 + cR * thetares * tres + ctheta * tres;
+    r0 = r[i_cur] * (1. - fract) + 
+      r[i_next] * fract;
       
     if (r0 <= a_r_base)
     {
@@ -690,11 +778,13 @@ void c_box :: find_cell_mix(double a_r, double a_theta, int &cr, int &ctheta)
   {
     cM = (cL + cR) / 2;
 
-    r0 = r[cM][ctheta][i_t_cur] * (1. - fract) + 
-      r[cM][ctheta][i_t_cur + 1] * fract;
+    i_cur = i_t_cur + cM * thetares * tres + ctheta * tres;
+    i_next = i_t_cur + 1 + cM * thetares * tres + ctheta * tres;
 
-    r1 = (r[cM][ctheta][i_t_cur] + dr[cM][ctheta][i_t_cur]) * (1.- fract) + 
-      (r[cM][ctheta][i_t_cur + 1] + dr[cM][ctheta][i_t_cur + 1]) * fract;
+    r0 = r[i_cur] * (1. - fract) + r[i_next] * fract;
+
+    r1 = (r[i_cur] + dr[i_cur]) * (1.- fract) + 
+      (r[i_next] + dr[i_next]) * fract;
 
     if (r1 > a_r_base and r0 <= a_r_base)
     {
@@ -723,6 +813,7 @@ void c_box :: find_cell_mix(double a_r, double a_theta, int &cr, int &ctheta)
     bool found; // true if correct radial index number found
     int cL, cM, cR; // auxiliary variables for computing radial index number
     double r0, r1; // lower and upper interpolated radial cell boundaries
+    int i_cur, i_next; // flattened indices
   
     // flip angle to counterjet convention
     a_theta = M_PI - a_theta;
@@ -750,10 +841,13 @@ void c_box :: find_cell_mix(double a_r, double a_theta, int &cr, int &ctheta)
     // determine appropriate r entry, first check boundaries
     found = false;
     cL = 0; cR = Rres - 1;
+
+    i_cur = i_t_cur + cL * thetares * tres + ctheta * tres;
+    i_next = i_t_cur + 1 + cL * thetares * tres + ctheta * tres;
   
-    r1 = (r_ctr[cL][ctheta][i_t_cur] + dr_ctr[cL][ctheta][i_t_cur]) * 
+    r1 = (r_ctr[i_cur] + dr_ctr[i_cur]) * 
       (1. - fract) + 
-      (r_ctr[cL][ctheta][i_t_cur + 1] + dr_ctr[cL][ctheta][i_t_cur + 1]) * 
+      (r_ctr[i_next] + dr_ctr[i_next]) * 
       fract;
     if (r1 > a_r_base)
     {
@@ -761,8 +855,11 @@ void c_box :: find_cell_mix(double a_r, double a_theta, int &cr, int &ctheta)
     }
     else
     {
-      r0 = r_ctr[cR][ctheta][i_t_cur] * (1. - fract) + 
-        r_ctr[cR][ctheta][i_t_cur + 1] * fract;
+      i_cur = i_t_cur + cR * thetares * tres + ctheta * tres;
+      i_next = i_t_cur + 1 + cR * thetares * tres + ctheta * tres;
+   
+      r0 = r_ctr[i_cur] * (1. - fract) + 
+        r_ctr[i_next] * fract;
       
       if (r0 <= a_r_base)
       {
@@ -773,13 +870,16 @@ void c_box :: find_cell_mix(double a_r, double a_theta, int &cr, int &ctheta)
     while (!found)
     {
       cM = (cL + cR) / 2;
-    
-      r0 = r_ctr[cM][ctheta][i_t_cur] * (1. - fract) + 
-        r_ctr[cM][ctheta][i_t_cur + 1] * fract;
 
-      r1 = (r_ctr[cM][ctheta][i_t_cur] + dr_ctr[cM][ctheta][i_t_cur]) * 
+      i_cur = i_t_cur + cM * thetares * tres + ctheta * tres;
+      i_next = i_t_cur + 1 + cM * thetares * tres + ctheta * tres;
+    
+      r0 = r_ctr[i_cur] * (1. - fract) + 
+        r_ctr[i_next] * fract;
+
+      r1 = (r_ctr[i_cur] + dr_ctr[i_cur]) * 
         (1. - fract) + 
-        (r_ctr[cM][ctheta][i_t_cur + 1] + dr_ctr[cM][ctheta][i_t_cur + 1]) *
+        (r_ctr[i_next] + dr_ctr[i_next]) *
         fract;
     
       if (r1 > a_r_base and r0 <= a_r_base)
@@ -821,7 +921,9 @@ void c_box :: set_cell_coords(int ir, int ith, double &a_r, double &a_th)
   // normal case
   double dtheta;
 
-  a_r = (r[ir][ith][i_t_cur] + 0.5 * dr[ir][ith][i_t_cur]) * Sr;
+  int i; // flattened index
+  i = i_t_cur + ir * thetares * tres + ith * tres;
+  a_r = (r[i] + 0.5 * dr[i]) * Sr;
   dtheta = theta_max[i_t_cur] / (double) thetares;
   a_th = ((double) ith + 0.5) * dtheta;
   return;
@@ -836,7 +938,10 @@ void c_box :: set_cell_coords(int ir, int ith, double &a_r, double &a_th)
     // normal case
     double dtheta;
 
-    a_r = (r_ctr[ir][ith][i_t_cur] + 0.5 * dr_ctr[ir][ith][i_t_cur]) * Sr;
+    int i; // flattened index
+    i = i_t_cur + ir * thetares * tres + ith * tres;
+
+    a_r = (r_ctr[i] + 0.5 * dr_ctr[i]) * Sr;
     dtheta = theta_max[i_t_cur] / (double) thetares;
     a_th = M_PI - ((double) ith + 0.5) * dtheta;
       // note that counterjet theta is zero pointing along counterjet axis
@@ -960,23 +1065,23 @@ void c_box :: set_local(s_coordinates cor)
             return;
           }
 
+          i_cur = i_t_cur + i_r * thetares * tres + i_theta * tres;
+          i_next = i_t_cur + 1 + i_r * thetares * tres + i_theta * tres;
+
           // set local variables, interpolated values drawn from snapshots
-          local[rho_] = (1. - fract) * dens_ctr[i_r][i_theta][i_t_cur] +
-            fract * dens_ctr[i_r][i_theta][i_t_cur + 1];
-            
-          local[rho_  
-            
+          local[rho_] = (1. - fract) * dens_ctr[i_cur] +
+            fract * dens_ctr[i_next];
           local[rho_] *= Sn;
 
-          local[eint_] = (1. - fract) * eint_ctr[i_r][i_theta][i_t_cur] +
-            fract * eint_ctr[i_r][i_theta][i_t_cur + 1];
+          local[eint_] = (1. - fract) * eint_ctr[i_cur] +
+            fract * eint_ctr[i_next];
           local[eint_] *= Sn;
 
-          local[v_x_] = (1. - fract) * velr_ctr[i_r][i_theta][i_t_cur] +
-            fract * velr_ctr[i_r][i_theta][i_t_cur + 1];
+          local[v_x_] = (1. - fract) * velr_ctr[i_cur] +
+            fract * velr_ctr[i_next];
 
-          local[v_y_] = (1. - fract) * veltheta_ctr[i_r][i_theta][i_t_cur] +
-            fract * veltheta_ctr[i_r][i_theta][i_t_cur + 1];
+          local[v_y_] = (1. - fract) * veltheta_ctr[i_cur] +
+            fract * veltheta_ctr[i_next];
 
           // set local variables, derived values
           local[lfac_] = sqrt(max(1.0, 1.0 / (1.0 - local[v_x_] * local[v_x_] -
@@ -1016,9 +1121,6 @@ void c_box :: set_local(s_coordinates cor)
       return;
     }
 
-    //i_cur = i_r + thetares * (i_theta + tres * i_t_cur); // flattened index
-    //i_next = i_r + thetares * (i_theta + tres * (i_t_cur + 1)); // same
-   
     i_cur = i_t_cur + i_r * thetares * tres + i_theta * tres;
     i_next = i_t_cur + 1 + i_r * thetares * tres + i_theta * tres;
     
@@ -1026,15 +1128,12 @@ void c_box :: set_local(s_coordinates cor)
     local[rho_] = (1. - fract) * dens[i_cur] + fract * dens[i_next];
     local[rho_] *= Sn;
 
-    local[eint_] = (1. - fract) * eint[i_r][i_theta][i_t_cur] +
-      fract * eint[i_r][i_theta][i_t_cur + 1];
+    local[eint_] = (1. - fract) * eint[i_cur] + fract * eint[i_next];
     local[eint_] *= Sn;
 
-    local[v_x_] = (1. - fract) * velr[i_r][i_theta][i_t_cur] +
-      fract * velr[i_r][i_theta][i_t_cur + 1];
+    local[v_x_] = (1. - fract) * velr[i_cur] + fract * velr[i_next];
 
-    local[v_y_] = (1. - fract) * veltheta[i_r][i_theta][i_t_cur] +
-      fract * veltheta[i_r][i_theta][i_t_cur + 1];
+    local[v_y_] = (1. - fract) * veltheta[i_cur] + fract * veltheta[i_next];
 
     // set local variables, derived values
     local[lfac_] = sqrt(max(1.0, 1.0 / (1.0 - local[v_x_] * local[v_x_] -
