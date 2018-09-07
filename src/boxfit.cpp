@@ -17,9 +17,9 @@
 int numprocs; // stores the number of processors used for this run
 int myid; // identity of single processor, 0 for non-parallel run
 c_boxfit *p_boxfit; // pointer to boxfit class for external fit function wrapper
+int noderank; // identity of single core within node
 
 #if OPEN_MPI_ == ENABLED_
-  int noderank; // identity of single core within node
   int nodesize;
   MPI_Comm nodecom;
 #endif

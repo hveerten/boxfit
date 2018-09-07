@@ -78,7 +78,15 @@ class c_box : public c_fluid
     double *r_ctr; // radial positions
     double *dr_ctr; // cell widths
 
-  #endif
+    #if OPEN_MPI_ == ENABLED_
+
+      MPI_Win dens_ctrwin, eint_ctrwin, velr_ctrwin;
+      MPI_Win veltheta_ctrwin, pres_ctrwin;
+      MPI_Win r_ctrwin, dr_ctrwin;
+
+    #endif
+
+  #endif // BOOST_
 
   int k; // circumburst medium slope k, either 0 or 2
 

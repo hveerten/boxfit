@@ -14,10 +14,10 @@
 ////////////////////////////////////////////////////////////////////////////////
 // global variables
 
+extern int noderank; // identity of single core within node, 0 if no MPI
 #if OPEN_MPI_ == ENABLED_
   // these variables should have been declared as global variables in the main
   // program
-  extern int noderank; // identity of single core within node
   extern int nodesize;
   extern MPI_Comm nodecom;
 #endif
@@ -304,14 +304,60 @@ void c_box :: load(const char* filename)
     if (counterjet)
     {
       // if there is a counterjet, assign memory
-      pres_ctr = new double[Rres * thetares * tres];
-      dens_ctr = new double[Rres * thetares * tres];
-      eint_ctr = new double[Rres * thetares * tres];
-      velr_ctr = new double[Rres * thetares * tres];
-      veltheta_ctr = new double[Rres * thetares * tres];
+      
+      #if OPEN_MPI_ == DISABLED_
+        pres_ctr = new double[Rres * thetares * tres];
+        dens_ctr = new double[Rres * thetares * tres];
+        eint_ctr = new double[Rres * thetares * tres];
+        velr_ctr = new double[Rres * thetares * tres];
+        veltheta_ctr = new double[Rres * thetares * tres];
 
-      r_ctr = new double[Rres * thetares * tres];
-      dr_ctr = new double[Rres * thetares * tres];
+        r_ctr = new double[Rres * thetares * tres];
+        dr_ctr = new double[Rres * thetares * tres];
+      #endif
+      #if OPEN_MPI_ == ENABLED_
+
+        if (noderank == 0)
+        {
+          size = Rres * thetares * tres;
+          localsize = size;
+        }
+        else
+          localsize = 0;
+
+        // allocate shared window
+        MPI_Win_allocate_shared(localsize*sizeof(double), sizeof(double),
+          MPI_INFO_NULL, nodecom, &pres_ctr, &pres_ctrwin);
+        MPI_Win_allocate_shared(localsize*sizeof(double), sizeof(double),
+          MPI_INFO_NULL, nodecom, &dens_ctr, &dens_ctrwin);
+        MPI_Win_allocate_shared(localsize*sizeof(double), sizeof(double),
+          MPI_INFO_NULL, nodecom, &eint_ctr, &eint_ctrwin);
+        MPI_Win_allocate_shared(localsize*sizeof(double), sizeof(double),
+          MPI_INFO_NULL, nodecom, &velr_ctr, &velr_ctrwin);
+        MPI_Win_allocate_shared(localsize*sizeof(double), sizeof(double),
+          MPI_INFO_NULL, nodecom, &veltheta_ctr, &veltheta_ctrwin);
+
+        MPI_Win_allocate_shared(localsize*sizeof(double), sizeof(double),
+          MPI_INFO_NULL, nodecom, &r_ctr, &r_ctrwin);
+        MPI_Win_allocate_shared(localsize*sizeof(double), sizeof(double),
+          MPI_INFO_NULL, nodecom, &dr_ctr, &dr_ctrwin);
+
+        // tell cores not of top rank in their node where to find data
+
+        if (noderank != 0)
+        {
+          MPI_Win_shared_query(pres_ctrwin, 0, &size, &size_disp, &pres_ctr);
+          MPI_Win_shared_query(dens_ctrwin, 0, &size, &size_disp, &dens_ctr);
+          MPI_Win_shared_query(eint_ctrwin, 0, &size, &size_disp, &eint_ctr);
+          MPI_Win_shared_query(velr_ctrwin, 0, &size, &size_disp, &velr_ctr);
+          MPI_Win_shared_query(veltheta_ctrwin, 0, &size, &size_disp,
+            &veltheta_ctr);
+
+          MPI_Win_shared_query(r_ctrwin, 0, &size, &size_disp, &r_ctr);
+          MPI_Win_shared_query(dr_ctrwin, 0, &size, &size_disp, &dr_ctr);
+        }
+
+      #endif // OPEN_MPI_ == ENABLED_
 
       theta_max_ctr = array_1d<double>(tres);
       R_max_ctr = array_2d<double>(thetares, tres);
@@ -417,23 +463,26 @@ void c_box :: load(const char* filename)
       H5Dclose(dataset);
       H5Sclose(dataspace);
 
-      // load dr
+      if (noderank == 0)
+      {
+        // load dr
   
-      dataset = H5Dopen1(h5_fid, "dr_ctr");
-      dataspace = H5Dget_space(dataset);
-      H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
-        dr_ctr);
-      H5Dclose(dataset);
-      H5Sclose(dataspace);
+        dataset = H5Dopen1(h5_fid, "dr_ctr");
+        dataspace = H5Dget_space(dataset);
+        H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
+          dr_ctr);
+        H5Dclose(dataset);
+        H5Sclose(dataspace);
 
-      // load r
+        // load r
   
-      dataset = H5Dopen1(h5_fid, "r_ctr");
-      dataspace = H5Dget_space(dataset);
-      H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
-        r_ctr);
-      H5Dclose(dataset);
-      H5Sclose(dataspace);
+        dataset = H5Dopen1(h5_fid, "r_ctr");
+        dataspace = H5Dget_space(dataset);
+        H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
+          r_ctr);
+        H5Dclose(dataset);
+        H5Sclose(dataspace);
+      }
     }
 
   #endif // BOOST_ == ENABLED_
@@ -496,7 +545,7 @@ void c_box :: load(const char* filename)
   
   #if BOOST_ == ENABLED_
   
-    if (counterjet)
+    if (counterjet and noderank == 0)
     {
       // load pres
       
