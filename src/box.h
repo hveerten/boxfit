@@ -145,6 +145,8 @@ class c_box : public c_fluid
   void close();
 
   void set_global(); // set values valid throughout BOX at given simulation time
+  void set_scale_factors(); // set the size scaling factor only. Used by 
+    // set_global and before computing the required ur_max size of the EDS
 
   void set_local(s_coordinates cor);
   void set_local_empty(s_coordinates &cor, double *a_local);

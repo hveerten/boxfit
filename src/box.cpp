@@ -1213,7 +1213,7 @@ double c_box :: get_var(int vartype, s_coordinates cor)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void c_box :: set_global()
+void c_box :: set_scale_factors()
 {
   // scaling settings
   if (k == 0)
@@ -1228,7 +1228,14 @@ void c_box :: set_global()
     Sn = pow(n / n_actual, 3) / pow(E / E_actual, 2);
     BM.k = 2.;
   }
+}
 
+////////////////////////////////////////////////////////////////////////////////
+
+void c_box :: set_global()
+{
+  set_scale_factors();
+  
   // analytical solution settings
   BM.E = E;
   BM.n_ext = n;

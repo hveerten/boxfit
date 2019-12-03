@@ -27,7 +27,7 @@ extern int myid; // identity of single processor
 #define OPEN_MPI_           ENABLED_
   // if OPEN_MPI_ is disabled, openMP will be used occasionally instead of MPI
   // and shared memory between cores is utilized. 
-#define BOOST_              ENABLED_
+#define BOOST_              DISABLED_
   // enabled for a Lorentz-boosted frame BOX / simulation
 
 //------------------------------------------------------------------------------

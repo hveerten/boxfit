@@ -35,7 +35,7 @@ void c_eds :: initialize()
   // assign memory
     
   if (memory_assigned) delete_array_2d(ray);
-  ray = array_2d<s_ray>(ur_rays + 1, uphi_rays + 1);
+  ray = array_2d<s_ray>(ur_rays, uphi_rays);
   memory_assigned = true;
 }
 
@@ -146,9 +146,9 @@ c_eds :: ~c_eds()
 
     if (RK != 1 and RK != 3)
     { 
-      for (iur = 0; iur <= ur_rays; iur++)
+      for (iur = 0; iur < ur_rays; iur++)
       {
-        for (iuphi = 0; iuphi <= uphi_rays; iuphi++)
+        for (iuphi = 0; iuphi < uphi_rays; iuphi++)
         {
           #if BOOST_ == DISABLED_
 
@@ -198,9 +198,9 @@ c_eds :: ~c_eds()
     //--------------------------------------------------------------------------
     // apply em and ab
   
-    for (iur = 0; iur <= ur_rays; iur++)
+    for (iur = 0; iur < ur_rays; iur++)
     {
-      for (iuphi = 0; iuphi <= uphi_rays; iuphi++)
+      for (iuphi = 0; iuphi < uphi_rays; iuphi++)
       {
         tau = ray[iur][iuphi].ab * Dr;
  
@@ -384,6 +384,232 @@ void c_eds :: set_coordinates(double a_t_sim)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+void c_eds :: save_image(int i)
+{
+  hid_t h5_fid;
+  hid_t dataset, dataspace;
+  char filename[255];
+  hsize_t dim_2d[2], dim_1d;
+  double value; // used for storing single double values in hdf5 file
+  int int_value; // used for storing integer values in hdf5 file
+  double **I; // local version of I
+  double *ur;
+  double *uphi;
+  int i_ur, i_uphi;
+  
+  #if LOCAL_SELF_ABSORPTION_ == DISABLED_
+    double tau; // cumulative optical depth
+    double S; // source function
+  #endif
+
+  I = array_2d<double>(ur_rays, uphi_rays);
+  ur = array_1d<double>(ur_rays);
+  uphi = array_1d<double>(uphi_rays);
+
+  //----------------------------------------------------------------------------
+  // prepare file
+  
+  sprintf(filename, "image%04d.h5", i);
+  h5_fid = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+
+  //----------------------------------------------------------------------------
+  // Store the header data
+  
+  value = p_Obs->t;
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "t_obs", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  value = ur_min;
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "ur_min", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  value = 0.; // this is always the same
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "uphi_min", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  value = ur_max;
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "ur_max", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  value = PI; // this is always the same
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "uphi_max", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  value = R_50;
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "R_50", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  value = R_75;
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "R_75", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  value = R_95;
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "R_95", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  value = R_99;
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "R_99", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  value = R_100;
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "R_100", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  int_value = ur_rays;
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "ur_rays", H5T_NATIVE_INT, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_INT, dataspace, dataspace,
+    H5P_DEFAULT, &int_value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  int_value = uphi_rays;
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "uphi_rays", H5T_NATIVE_INT, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_INT, dataspace, dataspace,
+    H5P_DEFAULT, &int_value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  //----------------------------------------------------------------------------
+  // Store the main data
+  
+  dim_2d[0] = ur_rays;
+  dim_2d[1] = uphi_rays;
+  dataspace = H5Screate_simple(2, &dim_2d[0], NULL);
+  dataset = H5Dcreate1(h5_fid, "I", H5T_NATIVE_DOUBLE, dataspace, H5P_DEFAULT);
+  // prepare emergent intensities for storing
+  for(i_ur = 0; i_ur < ur_rays; i_ur++)
+    for (i_uphi = 0; i_uphi < uphi_rays; i_uphi++)
+    {
+      #if LOCAL_SELF_ABSORPTION_ == ENABLED_
+  
+        I[i_ur][i_uphi] = ray[i_ur][i_uphi].I;
+ 
+      #else
+
+        tau = ray[i_ur][i_uphi].abdr;
+        if (tau > 1e-3)
+        {
+          S = ray[i_ur][i_uphi].emdr / ray[i_ur][i_uphi].abdr;
+          I[i_ur][i_uphi] = S * (1. - exp(-tau));
+        }
+        else
+        {
+          I[i_ur][i_uphi] = ray[i_ur][i_uphi].emdr * (1. - 0.5 * tau);
+        }
+
+      #endif
+    }
+  // store the intensities
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &I[0][0]);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  // coordinate information, r coordinates
+  for (i_ur = 0; i_ur < ur_rays; i_ur++)
+  {
+    ur[i_ur] = ray[i_ur][0].ur;
+    //printf("[ur[%d] = %e\n]", i_ur, ur[i_ur]);
+  }
+  dim_1d = ur_rays ;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "ur", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, ur);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+  
+  // coordinate information, phi coordinates
+  for (i_uphi = 0; i_uphi < uphi_rays; i_uphi++)
+    uphi[i_uphi] = ray[0][i_uphi].uphi;
+  dim_1d = uphi_rays;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "uphi", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, uphi);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  //----------------------------------------------------------------------------
+
+  // deallocate memory and close the file
+  H5Fclose(h5_fid);
+  
+  delete_array_2d(I);
+  delete_array_1d(ur);
+  delete_array_1d(uphi);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // internal ( protected ) functions c_eds_2D
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -400,7 +626,7 @@ double c_eds :: get_F_annulus(int iur)
     double F = 0.;
     int iuphi;
 
-    for (iuphi = 0; iuphi < uphi_rays / 5; iuphi++)
+    for (iuphi = 0; iuphi * 5 + 1 < uphi_rays; iuphi++)
       F += 5. * h / 288. * (
         19. * ray[iur][iuphi * 5].I +
         75. * ray[iur][iuphi * 5 + 1].I +
@@ -436,7 +662,7 @@ double c_eds :: get_F_annulus(int iur)
     double S[6], tau[6], dF[6];
     int i;
 
-    for (iuphi = 0; iuphi < uphi_rays / 5; iuphi++)
+    for (iuphi = 0; iuphi * 5 + 1 < uphi_rays; iuphi++)
     {
       for (i = 0; i < 6; i++)
       {
@@ -476,7 +702,7 @@ double c_eds :: get_F_annulus_lores_t(int iur)
     double F = 0.;
     int iuphi;
 
-    for (iuphi = 0; iuphi < uphi_rays / 5; iuphi++)
+    for (iuphi = 0; iuphi * 5 + 1 < uphi_rays; iuphi++)
       F += 5. * h / 288. * (
         19. * ray[iur][iuphi * 5].I_lores +
         75. * ray[iur][iuphi * 5 + 1].I_lores +
@@ -513,7 +739,7 @@ double c_eds :: get_F_annulus_lores_t(int iur)
     double S[6], tau[6], dF[6];
     int i;
 
-    for (iuphi = 0; iuphi < uphi_rays / 5; iuphi++)
+    for (iuphi = 0; iuphi * 5 + 1 < uphi_rays; iuphi++)
     {
       for (i = 0; i < 6; i++)
       {
@@ -554,7 +780,7 @@ double c_eds :: get_F_annulus_lores_phi(int iur)
     double F = 0.;
     int iuphi;
 
-    for (iuphi = 0; iuphi < uphi_rays / 5; iuphi += 2)
+    for (iuphi = 0; iuphi * 5 + 1 < uphi_rays; iuphi += 2)
       F += 5. * h / 288. * (
         19. * ray[iur][iuphi * 5].I +
         75. * ray[iur][iuphi * 5 + 1].I +
@@ -590,7 +816,7 @@ double c_eds :: get_F_annulus_lores_phi(int iur)
     double S[6], tau[6], dF[6];
     int i;
 
-    for (iuphi = 0; iuphi < uphi_rays / 5; iuphi += 2)
+    for (iuphi = 0; iuphi * 5 + 1 < uphi_rays; iuphi += 2)
     {
       for (i = 0; i < 6; i++)
       {
@@ -623,7 +849,9 @@ double c_eds :: get_total_flux()
   double F = 0.;
   double h = (log(ur_max) - log(ur_min)) / (double) ur_rays;
 
-  for (iur = 0; iur < ur_rays / 5; iur++)
+  for (iur = 0; iur * 5 + 1 < ur_rays; iur++)
+  {
+    //printf("[iur = %d, ur_rays = %d]\n", iur, ur_rays); fflush(stdout);////////////////////
     F += 5 * h / 288. * (
       19. * get_F_annulus(iur * 5) +
       75. * get_F_annulus(iur * 5 + 1) +
@@ -631,7 +859,8 @@ double c_eds :: get_total_flux()
       50. * get_F_annulus(iur * 5 + 3) +
       75. * get_F_annulus(iur * 5 + 4) +
       19. * get_F_annulus(iur * 5 + 5));
-
+  }
+  
   F = (2.0 * F) * (1.0 + p_Obs->z) / (p_Obs->dL * p_Obs->dL);
   return F;
 }
@@ -646,7 +875,7 @@ double c_eds :: get_F_r_error()
   int iur;
   double h = (log(ur_max) - log(ur_min)) * 2. / (double) ur_rays;
 
-  for (iur = 0; iur < ur_rays / 5; iur += 2)
+  for (iur = 0; iur * 5 + 1 < ur_rays; iur += 2)
     Flores += 5 * h / 288. * (
       19. * get_F_annulus(iur * 5) +
       75. * get_F_annulus(iur * 5 + 1) +
@@ -671,7 +900,7 @@ double c_eds :: get_F_phi_error()
   double Flores = 0.;
   double h = (log(ur_max) - log(ur_min)) / (double) ur_rays;
 
-  for (iur = 0; iur < ur_rays / 5; iur++)
+  for (iur = 0; iur * 5 + 1 < ur_rays; iur++)
     Flores += 5 * h / 288. * (
       19. * get_F_annulus_lores_phi(iur * 5) +
       75. * get_F_annulus_lores_phi(iur * 5 + 1) +
@@ -696,7 +925,7 @@ double c_eds :: get_F_t_error()
   int iur;
   double h = (log(ur_max) - log(ur_min)) / (double) ur_rays;
 
-  for (iur = 0; iur < ur_rays / 5; iur++)
+  for (iur = 0; iur * 5 + 1 < ur_rays; iur++)
     Flores += 5 * h / 288. * (
       19. * get_F_annulus_lores_t(iur * 5) +
       75. * get_F_annulus_lores_t(iur * 5 + 1) +
@@ -727,13 +956,13 @@ void c_eds :: set_R()
   double F_total = 0.0, f = 0.0; // 'f' is fractional flux
 
   // get total
-  for (iur = 0; iur <= ur_rays; iur++)
+  for (iur = 0; iur < ur_rays; iur++)
     F_total += get_F_annulus(iur);
   
   // get fractional results
   R_99 = -1.0; R_95 = -1.0; R_75 = -1.0; R_50 = -1.0;
   
-  for (iur = 0; iur <= ur_rays; iur++)
+  for (iur = 0; iur < ur_rays; iur++)
   {
     df = get_F_annulus(iur);
     f += df;
@@ -755,17 +984,20 @@ void c_eds :: reset()
   
   //----------------------------------------------------------------------------
   // set coordinates assumes that lnur_max and lnur_min are set
-  duphi = (PI - 0.0) / (double) uphi_rays;
-  dlnur = (log(ur_max) - log(ur_min)) / (double) ur_rays;
+  if (uphi_rays == 1)
+    duphi = PI;
+  else 
+    duphi = (PI - 0.0) / (double) (uphi_rays - 1);
+  dlnur = (log(ur_max) - log(ur_min)) / (double) (ur_rays - 1);
 
   // set unit vectors on the EDS plane in the frame of the grid, 
   // assuming theta_obs related variables are set
   eux[0] = p_Obs->costheta; eux[1] = 0.0; eux[2] = -p_Obs->sintheta;
   euy[0] = 0.0; euy[1] = 1.0; euy[2] = 0.0;
 
-  for (iur = 0; iur <= ur_rays; iur++)
+  for (iur = 0; iur < ur_rays; iur++)
   {
-    for (iuphi = 0; iuphi <= uphi_rays; iuphi++)
+    for (iuphi = 0; iuphi < uphi_rays; iuphi++)
     {
       ray[iur][iuphi].ur = exp(log(ur_min) + iur * dlnur);
       ray[iur][iuphi].uphi = iuphi * duphi;

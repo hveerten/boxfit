@@ -22,6 +22,7 @@ c_flux_box :: c_flux_box()
   ur0_overrule = -1.;
   
   save_emission_profile = false;
+  save_image = false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -71,6 +72,8 @@ int c_flux_box :: set_flux_th(int i_box, double &F_th)
   //----------------------------------------------------------------------------
   // set emission time range and EDS size, either from argument of from estimate
   // Argument values < 0 mean that the estimate will be applied
+
+  mbox.box[i_box].set_scale_factors();  
   
   if (t1_overrule < 0.)
   {
@@ -181,6 +184,7 @@ int c_flux_box :: set_flux_th(int i_box, double &F_th)
   eds.ur_max = fmin(eds.ur_max, 
     mbox.box[i_box].R_max[0][mbox.box[i_box].tres - 1] *
     mbox.box[i_box].Sr * 1.2);
+
   
   if (ur0_overrule < 0.)
   {  
@@ -454,6 +458,9 @@ int c_flux_box :: set_flux_th(int i_box, double &F_th)
     fclose(p_log_file);
   }
   
+  // now save the eds profile too.
+  if (save_image) eds.save_image(counter);
+
   // return success by default
   return 0;
 }

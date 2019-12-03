@@ -38,6 +38,7 @@ class c_flux_box : public c_flux
   
   int counter; // data point counter, useful for debugging
   bool save_emission_profile; // true if log files enabled
+  bool save_image; // true if image is to be saved to disc as well.
 
   double tfirst, tlast; // first and last received BOX times from which flux
    // is received will be reported here

@@ -2009,6 +2009,30 @@ int c_boxfit :: initialize(int argc, char* argv[])
     }
   }
 
+  // read intermediate image-on-sky file settings
+  read_status = read_parfile_int(parfilename, "save_image", tempint);
+  read_status2 = parse_int("-save_image=", tempint2, argc, argv);
+  if (what_to_do == 1 or what_to_do == 2) 
+  {
+    if (read_status == false and read_status2 == false and myid == 0)
+    {
+      // feature is 'hidden' for now, while under development
+      //printf("# WARNING, save_emission_profile not set, assuming 0.\n");
+      //fflush(stdout);
+    }
+    if (read_status == true)
+    {
+      if (tempint == 1) flux.save_image = true;
+    }
+    if (read_status2 == true) // command line overrules
+    {
+      if (tempint2 == 1)
+        flux.save_image = true;
+      else
+        flux.save_image = false;
+    }
+  }
+
   // read frequencies and times
   t_0 = double_from_parfile(parfilename, "t_0");
   if (parse("-t_0=", argc, argv)) // command line overrules
@@ -2437,9 +2461,57 @@ int c_boxfit :: initialize(int argc, char* argv[])
   if (parse("-eds_r_res=", argc, argv)) // command line overrules
     parse_int("-eds_r_res=", flux.eds.ur_rays, argc, argv);
 
+  if (flux.eds.ur_rays % 5 != 0)
+  {
+    if (myid == 0)
+    {
+      printf("ERROR: eds_r_res should be divisible by 5.\n");
+      fflush(stdout);
+    }
+    return 1;
+  }
+
+  if (flux.eds.ur_rays % 2 != 0)
+  {
+    if (myid == 0)
+    {
+      printf("ERROR: eds_r_res should be divisible by 2.\n");
+      fflush(stdout);
+    }
+    return 1;
+  }
+  // Because we integrate flux using a 6 point closed interval integrator, we 
+  // add one point (n points means n plus one boundaries)
+  flux.eds.ur_rays++;
+
   flux.eds.uphi_rays = int_from_parfile(parfilename, "eds_phi_res");
   if (parse("-eds_phi_res=", argc, argv)) // command line overrules
     parse_int("-eds_phi_res=", flux.eds.uphi_rays, argc, argv);
+
+  if (flux.eds.uphi_rays != 1 and flux.eds.uphi_rays % 2 != 0)
+  {
+    if (myid == 0)
+    {
+      printf("ERROR: eds_phi_res should be 1 or divisible by 2.\n");
+      fflush(stdout);
+    }
+    return 1;
+  }
+
+  if (flux.eds.uphi_rays != 1 and flux.eds.uphi_rays % 5 != 0)
+  {
+    if (myid == 0)
+    {
+      printf("ERROR: eds_phi_res should be 1 or divisible by 5.\n");
+      fflush(stdout);
+    }
+    return 1;
+  }
+
+  // Because we integrate flux using a 6 point closed interval integrator, we 
+  // add one point for off-axis (n points means n plus one boundaries)
+  if (flux.eds.uphi_rays != 1)
+    flux.eds.uphi_rays++;
 
   temp = double_from_parfile(parfilename, "temp");
   read_status = parse_double("-temp=", tempdouble, argc, argv);

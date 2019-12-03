@@ -17,6 +17,7 @@
 #include "arraytools.h"
 #include "radiation.h"
 #include "observer.h"
+#include "hdf5.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -71,8 +72,8 @@ class c_eds
   // observer information
   c_observer *p_Obs;
   
-  int ur_rays;
-  int uphi_rays;
+  int ur_rays; // number of rays logarithmically space in r direction
+  int uphi_rays; // number of rays linearly spaced in phi direction
   bool memory_assigned; // false initially. Memory is assigned in initialize()
 
   double ur_max; // upper r boundary of the eds. 'u' denotes coord in eds frame
@@ -107,6 +108,9 @@ class c_eds
     void finalize_RK_update();
   
   #endif
+
+  // Disc IO related function
+  void save_image(int i);
 
   // output functions  
   double get_F_annulus(int iur);
