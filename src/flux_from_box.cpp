@@ -46,6 +46,7 @@ int c_flux_box :: set_flux_th(int i_box, double &F_th)
   double taux; // auxiliary variable for computing emission time domain
   
   char log_filename[14];
+  char image_filename[15];
   FILE *p_log_file; // log file
  
   //----------------------------------------------------------------------------
@@ -459,7 +460,14 @@ int c_flux_box :: set_flux_th(int i_box, double &F_th)
   }
   
   // now save the eds profile too.
-  if (save_image) eds.save_image(counter);
+  if (save_image)
+  {
+    if (mbox.box[i_box].theta_0 < mbox.th0)
+      sprintf(image_filename, "image%04d-0.h5", counter);
+    else
+      sprintf(image_filename, "image%04d-1.h5", counter);
+    if (save_image) eds.save_image(image_filename);
+  }
 
   // return success by default
   return 0;

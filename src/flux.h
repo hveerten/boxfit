@@ -18,7 +18,6 @@
 
 #include "observer.h"
 #include "eds_2D_regular.h"
-#include "eds_IO.h"
 #include "radiation.h"
 #include "fluid.h"
 
@@ -40,7 +39,7 @@ class c_flux
 
     // classes used by the flux class
 
-    c_eds_IO eds;
+    c_eds eds;
     c_emab emab;
     c_observer *p_Obs;
 

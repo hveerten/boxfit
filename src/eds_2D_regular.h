@@ -110,7 +110,7 @@ class c_eds
   #endif
 
   // Disc IO related function
-  void save_image(int i);
+  void save_image(const char * filename);
 
   // output functions  
   double get_F_annulus(int iur);

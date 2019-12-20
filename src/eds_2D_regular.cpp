@@ -385,11 +385,10 @@ void c_eds :: set_coordinates(double a_t_sim)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void c_eds :: save_image(int i)
+void c_eds :: save_image(const char *filename)
 {
   hid_t h5_fid;
   hid_t dataset, dataspace;
-  char filename[255];
   hsize_t dim_2d[2], dim_1d;
   double value; // used for storing single double values in hdf5 file
   int int_value; // used for storing integer values in hdf5 file
@@ -410,16 +409,45 @@ void c_eds :: save_image(int i)
   //----------------------------------------------------------------------------
   // prepare file
   
-  sprintf(filename, "image%04d.h5", i);
   h5_fid = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
 
   //----------------------------------------------------------------------------
   // Store the header data
   
+  value = F;
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "F", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
   value = p_Obs->t;
   dim_1d = 1;
   dataspace = H5Screate_simple(1, &dim_1d, NULL);
   dataset = H5Dcreate1(h5_fid, "t_obs", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  value = p_Obs->z;
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "z", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  value = p_Obs->dL;
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "dL", H5T_NATIVE_DOUBLE, dataspace,
     H5P_DEFAULT);
   H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
     H5P_DEFAULT, &value);
@@ -682,7 +710,9 @@ double c_eds :: get_F_annulus(int iur)
         50. * dF[3] + 75. * dF[4] + 19. * dF[5] );
     }
 
-    return F * ray[iur][0].ur * ray[iur][0].ur;
+    // include a factor 2 to add the other half (phi = PI .. 2PI), which mirrors
+    // the first half (phi = 0.. PI)
+    return 2. * F * ray[iur][0].ur * ray[iur][0].ur;
 
   #endif
 }
@@ -760,7 +790,9 @@ double c_eds :: get_F_annulus_lores_t(int iur)
         50. * dF[3] + 75. * dF[4] + 19. * dF[5] );
     }
 
-    return F * ray[iur][0].ur * ray[iur][0].ur;
+    // include a factor 2 to add the other half (phi = PI .. 2PI), which mirrors
+    // the first half (phi = 0.. PI)
+    return 2. * F * ray[iur][0].ur * ray[iur][0].ur;
 
   #endif
 }
@@ -836,7 +868,9 @@ double c_eds :: get_F_annulus_lores_phi(int iur)
         50. * dF[3] + 75. * dF[4] + 19. * dF[5] );
     }
 
-    return F * ray[iur][0].ur * ray[iur][0].ur;
+    // include a factor 2 to add the other half (phi = PI .. 2PI), which mirrors
+    // the first half (phi = 0.. PI)
+    return 2 * F * ray[iur][0].ur * ray[iur][0].ur;
 
   #endif
 }
@@ -846,12 +880,18 @@ double c_eds :: get_F_annulus_lores_phi(int iur)
 double c_eds :: get_total_flux()
 {
   int iur; // , iuphi;
-  double F = 0.;
   double h = (log(ur_max) - log(ur_min)) / (double) ur_rays;
 
+  // Compute the flux by summing over the annuli. Since the radial coordinates
+  // are logarithmically spaced, we can only use a higher-order method for
+  // equally spaced abscissas if we integrate over ln r instead of r. The
+  // integral then becomes Int r^2 I d u_phi d ln _ur in polar coordinates on
+  // the EDS.
+
+  // this loop implements a 6-point closed formula for eqally spaced abscissas:
+  F = 0;
   for (iur = 0; iur * 5 + 1 < ur_rays; iur++)
   {
-    //printf("[iur = %d, ur_rays = %d]\n", iur, ur_rays); fflush(stdout);////////////////////
     F += 5 * h / 288. * (
       19. * get_F_annulus(iur * 5) +
       75. * get_F_annulus(iur * 5 + 1) +
@@ -860,8 +900,14 @@ double c_eds :: get_total_flux()
       75. * get_F_annulus(iur * 5 + 4) +
       19. * get_F_annulus(iur * 5 + 5));
   }
+    // Note how this version is clumsily implemented and computes the edge
+    // values twice. The integral could be rewritten to fix that but the
+    // total integration takes a negible amount of time anyway compared
+    // to the full radiative transfer problem.
   
-  F = (2.0 * F) * (1.0 + p_Obs->z) / (p_Obs->dL * p_Obs->dL);
+  // correct the flux for distance
+  F = F * (1.0 + p_Obs->z) / (p_Obs->dL * p_Obs->dL);
+  
   return F;
 }
 

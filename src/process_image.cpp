@@ -4,6 +4,7 @@
 #include "arraytools.h"
 #include <cmath>
 #include "extramath.h"
+#include "physics.h"
 
 int main(int argc, char* argv[])
 {
@@ -21,25 +22,36 @@ int main(int argc, char* argv[])
   int uphi_rays; // number of rays in phi direction
   double ur_max; // upper r boundary of the eds. 'u' denotes coord in eds frame
   double ur_min; // lower boundary of eds.
-  double R_100;
+  double R_50, R_75, R_95, R_99, R_100;
   double t_obs;
+  double z, dL; // redshift and luminosity distance
+  double F; // flux in mJy
   
   double value; // for writing scalars to new hdf5 file
   int intvalue; // same as above, but for integers
   
   // additional content
   double *Ix, *Iy; // projected intensities on axes
+  double *Ir; // projected intensity in r-direction (integrating out phi)
   double **Ixy; // full map of intensities in Cartesian coordinates
   int xy_res;
   double I_total; // total summed intentsity (not including area information,
     // so not equal to flux
   double Ix_left, Ix_right, Ix_total;
   double Iy_left, Iy_total, Iy_right;
+  double Ir_left, Ir_right, Ir_total;
+  double Fxy; // flux inferred from intensities on Cartesian grid
   
   int i_ux, i_uy, i_ur, i_uphi;
+  int i_ux_sub, i_uy_sub; // loop counters for the subgrid resolution used
+    // to compute Ixy at a coarser grid than is sampled
   double *ux, *uy; // x,y-coordinates of Cartesian version
   double dux;
   double ur_local, uphi_local, lnur_local;
+  double ux_local, uy_local;
+  double dlnur, duphi;
+  int sub_res = 1;//0; // subgrid resolution when setting up Ixy
+  double ux_max;  
 
   // open the image file for reading AND writing
   if (argc > 1)
@@ -63,6 +75,13 @@ int main(int argc, char* argv[])
 
   //----------------------------------------------------------------------------
   // read the relevant content
+
+  dataset = H5Dopen1(h5_fid, "F");
+  dataspace = H5Dget_space(dataset);
+  H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
+    &F);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
   
   dataset = H5Dopen1(h5_fid, "t_obs");
   dataspace = H5Dget_space(dataset);
@@ -71,6 +90,19 @@ int main(int argc, char* argv[])
   H5Dclose(dataset);
   H5Sclose(dataspace);
   
+  dataset = H5Dopen1(h5_fid, "z");
+  dataspace = H5Dget_space(dataset);
+  H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
+    &z);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  dataset = H5Dopen1(h5_fid, "dL");
+  dataspace = H5Dget_space(dataset);
+  H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
+    &dL);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
   
   dataset = H5Dopen1(h5_fid, "ur_rays");
   dataspace = H5Dget_space(dataset);
@@ -83,6 +115,34 @@ int main(int argc, char* argv[])
   dataspace = H5Dget_space(dataset);
   H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
     &ur_max);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  dataset = H5Dopen1(h5_fid, "R_50");
+  dataspace = H5Dget_space(dataset);
+  H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
+    &R_50);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  dataset = H5Dopen1(h5_fid, "R_75");
+  dataspace = H5Dget_space(dataset);
+  H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
+    &R_75);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  dataset = H5Dopen1(h5_fid, "R_95");
+  dataspace = H5Dget_space(dataset);
+  H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
+    &R_95);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  dataset = H5Dopen1(h5_fid, "R_99");
+  dataspace = H5Dget_space(dataset);
+  H5Dread(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace, H5P_DEFAULT, 
+    &R_99);
   H5Dclose(dataset);
   H5Sclose(dataspace);
 
@@ -129,30 +189,44 @@ int main(int argc, char* argv[])
   H5Dclose(dataset);
   H5Sclose(dataspace);
 
+  // derived information
+  
+  duphi = PI / (uphi_rays - 1);
+  dlnur = (log(ur_max) - log(ur_min)) / (ur_rays - 1);
+
   //----------------------------------------------------------------------------
   // print file summary
   
+  //printf("TEMP INFO:\n");
+  //for (i_ur = 0; i_ur < ur_rays - 1; i_ur++)
+  //  printf("i_ur = %d, ur[i_ur] = %e, ur[i_ur+1] = %e, dlnur = %e\n", i_ur, ur[i_ur], ur[i_ur+1], log(ur[i_ur+1]) - log(ur[i_ur]));
+  
   printf("t_obs = %e s = %e days\n", t_obs, t_obs / (24. * 60 * 60));
-  printf("ur_max = %e\n", ur_max);
+  printf("ur_min = %e, ur_max = %e\n", ur_min, ur_max);
   printf("ur_rays = %d\n", ur_rays);
+  printf("dln_ur = %e\n", dlnur);
   printf("uphi_rays = %d\n", uphi_rays);
   printf("R_100 = %e\n", R_100);
-  
+
   // temporary hack to zoom in on the actual image on the sky
-  if (R_100 > 0.) ur_max = R_100;
+  if (R_100 > 0.) 
+    ux_max = R_100;
+  else
+    ux_max = ur_max;
   
   //----------------------------------------------------------------------------
   // generate additional content
   xy_res = 2 * ur_rays - 1; // pos and negative, not double-counting the 
     // central point
 
-  //xy_res *= 5;
+  //xy_res *= 2;
 
   Ix = array_1d<double>(xy_res);
   Iy = array_1d<double>(xy_res);
   ux = array_1d<double>(xy_res);
   uy = array_1d<double>(xy_res);
   Ixy = array_2d<double>(xy_res, xy_res);
+  Ir = array_1d<double>(ur_rays);
   
   // clean up projected intensity arrays first
   for (i_ux = 0; i_ux < xy_res; i_ux++)
@@ -160,13 +234,17 @@ int main(int argc, char* argv[])
     Ix[i_ux] = 0.;
     Iy[i_ux] = 0.;
   }
+  for (i_ur = 0; i_ur < ur_rays; i_ur++)
+  {
+    Ir[i_ur] = 0.;
+  }
   
   // set up x,y coordinates
-  dux = ur_max / (ur_rays - 1);
+  dux = ux_max / (xy_res * 0.5 + 0.5 - 1);
   for (i_ux = 0; i_ux < xy_res; i_ux++)
   {
-    ux[i_ux] = -ur_max + i_ux * dux;
-    uy[i_ux] = -ur_max + i_ux * dux;
+    ux[i_ux] = -ux_max + i_ux * dux;
+    uy[i_ux] = -ux_max + i_ux * dux;
     //printf("ux[%d] = %e\n", i_ux, ux[i_ux]);
   }
   
@@ -175,62 +253,86 @@ int main(int argc, char* argv[])
     //i_uy = xy_res / 2;
     for (i_uy = 0; i_uy < xy_res; i_uy ++)
     {
-      ur_local = sqrt(ux[i_ux] * ux[i_ux] + uy[i_uy] * uy[i_uy]);
+      Ixy[i_ux][i_uy] = 0;
+      for (i_ux_sub = 0; i_ux_sub < sub_res; i_ux_sub++)
+      {
+        ux_local = ux[i_ux] - 0.5 * dux + (i_ux_sub + 0.5) * dux / sub_res;
+        for (i_uy_sub = 0; i_uy_sub < sub_res; i_uy_sub++)
+        {
+          uy_local = uy[i_uy] - 0.5 * dux + (i_uy_sub + 0.5) * dux / sub_res;
+          
+          ur_local = sqrt(ux_local * ux_local + uy_local * uy_local);
       
-      // deal with first quadrant, including y = 0
-      if (ux[i_ux] > 0 and uy[i_uy] >= 0)
-      {
-        if (uy[i_uy] < 1e-8) uphi_local = 0.0;
-        else uphi_local = atan(uy[i_uy] / ux[i_ux]);
-      }
-      else // 2nd quadrant
-      if (ux[i_ux] <= 0 and uy[i_uy] > 0)
-      {
-        if (fabs(ux[i_ux]) < 1e-8) uphi_local = 0.5 * PI;
-        else uphi_local = PI - atan(-uy[i_uy] / ux[i_ux]);
-      }
-      else
-      if (ux[i_ux] < 0 and uy[i_uy] <= 0)
-      {
-        if (fabs(uy[i_uy]) < 1e-8) uphi_local = PI;
-        else uphi_local = PI + atan(uy[i_uy] / ux[i_ux]);
-      }
-      else
-      {
-        if (ux[i_ux] < 1e-8) uphi_local = 1.5 * PI;
-        else uphi_local = 2.0 * PI - atan(-uy[i_uy] / ux[i_ux]);
-      }      
+          // deal with first quadrant, including y = 0
+          if (ux_local > 0 and uy_local >= 0)
+          {
+            if (uy_local < 1e-8) uphi_local = 0.0;
+            else uphi_local = atan(uy_local / ux_local);
+          }
+          else // 2nd quadrant
+          if (ux_local <= 0 and uy_local > 0)
+          {
+            if (fabs(ux_local) < 1e-8) uphi_local = 0.5 * PI;
+            else uphi_local = PI - atan(-uy_local / ux_local);
+          }
+          else
+          if (ux_local < 0 and uy_local <= 0)
+          {
+            if (fabs(uy_local) < 1e-8) uphi_local = PI;
+            else uphi_local = PI + atan(uy_local / ux_local);
+          }
+          else
+          {
+            if (ux_local < 1e-8) uphi_local = 1.5 * PI;
+            else uphi_local = 2.0 * PI - atan(-uy_local / ux_local);
+          }      
 
-      if (uphi_local < 0)
-        uphi_local = -uphi_local;
-      if (uphi_local > PI)
-        uphi_local = PI - (uphi_local - PI);
+          if (uphi_local < 0)
+            uphi_local = -uphi_local;
+          if (uphi_local > PI)
+            uphi_local = PI - (uphi_local - PI);
+
+          // find the appropriate r, phi entries
+          i_uphi = (uphi_local / PI * (uphi_rays)); // type-casting to int drops
+            // everything beyond the decimal point
+          if (i_uphi == uphi_rays)
+            i_uphi--; // deals with the case of being at PI exactly
       
-      // find the appropriate r, phi entries
-      i_uphi = (uphi_local / PI * (uphi_rays)); // type-casting to int drops
-        // everything beyond the decimal point
-      if (i_uphi == uphi_rays)
-          i_uphi--; // deals with the case of being at PI exactly
+          if (ur_local <= ur_min) 
+            i_ur = -1;
+          else
+          {
+            lnur_local = log(ur_local);
+            i_ur = ((lnur_local + 0.5 * dlnur - log(ur_min)) / (log(ur_max) - log(ur_min)) * 
+              ur_rays);
+            
+            //printf("i_ur from assuming fixed log steps:\n");
+            //printf("  lnur_local + 0.5 * dlnur - log(ur_min) = %e\n", lnur_local + 0.5 * dlnur - log(ur_min));
+            //printf("  (log(ur_max) - log(ur_min) = %e\n", (log(ur_max) - log(ur_min)));
+            //printf("  ur_max = %e, ur_min = %e\n", ur_max, ur_min);
+            //printf("  ur_local = %e; ur[i_ur] = %e; ur[i_ur - 1] = %e; ur[i_ur + 1] = %e, i_ur = %d\n", ur_local, ur[i_ur], ur[i_ur - 1], ur[i_ur+1], i_ur);
+            
+            //for (i_ur = 0; i_ur < ur_rays; i_ur++)
+            //  if (ur[i_ur] > ur_local) break;
+            //printf("  i_ur from walking through grid:\n");
+            //printf("  ur_local = %e; ur[i_ur] = %e; ur[i_ur - 1] = %e; ur[i_ur + 1] = %e, i_ur = %d\n", ur_local, ur[i_ur], ur[i_ur - 1], ur[i_ur+1], i_ur);
+            
+          }
       
-      if (ur_local <= ur_min) 
-        i_ur = 0;
-      else
-      {
-        lnur_local = log(ur_local);
-        i_ur = (lnur_local - log(ur_min)) / (log(ur_max) - log(ur_min)) * 
-          ur_rays;
-      }
-      
-      if (i_ur < ur_rays)
-        Ixy[i_ux][i_uy] = I[i_ur][i_uphi];
-      else
-        Ixy[i_ux][i_uy] = 0;// Cartesian square includes parts not in EDS circle
-      //if (Ixy[i_ux][i_uy] > 0.)
-      //  printf("(x = %e, y= %e) -> (r = %e, phi = %e). i_r = %d, i_phi = %d, I = %e\n ", ux[i_ux], uy[i_uy], ur_local, uphi_local, i_ur, i_uphi, Ixy[i_ux][i_uy]);
+          if (i_ur < ur_rays and i_ur >= 0)
+            Ixy[i_ux][i_uy] += I[i_ur][i_uphi] / (sub_res * sub_res);
+          else
+            Ixy[i_ux][i_uy] += 0;// Cartesian square includes parts not in EDS circle
+          //if (Ixy[i_ux][i_uy] > 0.)
+          //  printf("(x = %e, y= %e) -> (r = %e, phi = %e). i_r = %d, i_phi = %d, I = %e\n ", ux[i_ux], uy[i_uy], ur_local, uphi_local, i_ur, i_uphi, Ixy[i_ux][i_uy]);
+        }
+      }  
     }
   }
   
-  // project the intensity profiles on the x and y axes
+  
+  // project the intensity profiles on the x and y axes, get the summed
+  // intensity as well.
   I_total = 0;
   for (i_ux = 0; i_ux < xy_res; i_ux++)
   {
@@ -248,6 +350,11 @@ int main(int argc, char* argv[])
        Iy[i_uy] += Ixy[i_ux][i_uy];
     }
   }
+  
+  // translate summed intensity to a flux value, this means multiplying with
+  // a representative area per ray, accounting for redshift and luminosity
+  // distance.
+  Fxy = I_total * dux * dux * (1. + z) / (dL * dL);
   
   // compute the size both in x and y directions
   Ix_total = 0;
@@ -297,9 +404,55 @@ int main(int argc, char* argv[])
       break;
     }    
   }
+
+  // intensity profile when phi is integrated out
+  I_total = 0.; // re-use I-total for the radial grid
+  for (i_ur = 0; i_ur < ur_rays; i_ur++)
+  {
+    for (i_uphi = 0; i_uphi < uphi_rays; i_uphi++)
+    {
+      Ir[i_ur] += I[i_ur][i_uphi];
+    }
+    // compute total intensity, where we now are forced to account throughout
+    // for the radial irregularity of the grid. Might as well go all the way
+    // to including the area elements. We are summing over elements
+    // I r^2 d lnr d uphi here, which is just the surface integral transformed
+    // to logarithmic radius
+    I_total += Ir[i_ur] * ur[i_ur] * ur[i_ur] * dlnur * duphi * 2.;
+  }
+  
+  printf("recomputed flux from radial grid: %e mJy\n", I_total * (1.+z) / dL / dL * cgs2mJy);
+
+  Ir_total = 0;
+  Ir_right = 0; // default value, to be overruled by loop
+  for (i_ur = 0; i_ur < ur_rays; i_ur++)
+  {
+    Ir_total += Ir[i_ur] * ur[i_ur] * ur[i_ur] * dlnur * duphi * 2.;
+    if (Ir_total > 0.99 * I_total)
+    {
+      Ir_right = ur[i_ur]; /////////////////////////////////////////////////////////////////// minus one test, remove!
+      printf("radial size measure: %e\n", exp(log(ur[i_ur])+0.5*dlnur) - exp(log(ur[i_ur])-0.5*dlnur));
+      break;
+    }    
+  }
+  
+  Ir_total = 0;
+  Ir_left = ur_rays - 1;
+  for (i_ur = ur_rays - 1; i_ur >= 0; i_ur--)
+  {
+    Ir_total += Ir[i_ur] * ur[i_ur] * ur[i_ur] * dlnur * duphi * 2.;
+    if (Ir_total > 0.99 * I_total)
+    {
+      Ir_left = ur[i_ur];
+      break;
+    }    
+  }
   
   printf("x_left = %e, x_right = %e, size = %e\n", Ix_left, Ix_right, Ix_right - Ix_left);
   printf("y_left = %e, y_right = %e, size = %e\n", Iy_left, Iy_right, Iy_right - Iy_left);
+  printf("r_left = %e, r_right = %e, size = %e\n", Ir_left, Ir_right, Ir_right - Ir_left);
+  printf("total flux according to Ixy: %e mJy\n", Fxy * cgs2mJy);
+  printf("total flux read from image file: %e mJy\n", F * cgs2mJy );
 
   // close the input file
   H5Fclose(h5_fid);
@@ -329,6 +482,16 @@ int main(int argc, char* argv[])
   H5Dclose(dataset);
   H5Sclose(dataspace);
 
+  value = F;
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "F", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
   value = ur_max;
   dim_1d = 1;
   dataspace = H5Screate_simple(1, &dim_1d, NULL);
@@ -343,6 +506,46 @@ int main(int argc, char* argv[])
   dim_1d = 1;
   dataspace = H5Screate_simple(1, &dim_1d, NULL);
   dataset = H5Dcreate1(h5_fid, "t_obs", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  value = R_50;
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "R_50", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  value = R_75;
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "R_75", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  value = R_95;
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "R_95", H5T_NATIVE_DOUBLE, dataspace,
+    H5P_DEFAULT);
+  H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
+    H5P_DEFAULT, &value);
+  H5Dclose(dataset);
+  H5Sclose(dataspace);
+
+  value = R_99;
+  dim_1d = 1;
+  dataspace = H5Screate_simple(1, &dim_1d, NULL);
+  dataset = H5Dcreate1(h5_fid, "R_99", H5T_NATIVE_DOUBLE, dataspace,
     H5P_DEFAULT);
   H5Dwrite(dataset, H5T_NATIVE_DOUBLE, dataspace, dataspace,
     H5P_DEFAULT, &value);
@@ -456,6 +659,7 @@ int main(int argc, char* argv[])
   
   delete_array_1d(Ix);
   delete_array_1d(Iy);
+  delete_array_1d(Ir);
   delete_array_1d(ux);
   delete_array_1d(uy);
   delete_array_2d(Ixy);
