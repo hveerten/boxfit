@@ -1,0 +1,7 @@
+# This file is here to facilitate cloning boxfit from scratch, by ensuring the existence of a bin directory. This directory provides a natural place for binary files to be written to following compilation.
+
+# Ignore the binaries in this directory
+*
+
+# but not the ignore file itself
+!.gitignore
