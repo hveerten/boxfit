@@ -20,14 +20,22 @@ First clone the repository:
 ```
 git clone https://github.com/hveerten/boxfit
 ```
-In the */src* subdirectory, set up a makefile starting from the *makefile.template* file:
+In the *boxfit/src* subdirectory, set up a makefile starting from the *makefile.template* file:
 ```
 cd boxfit/src
 cp makefile.template makefile
 ```
+BOXFIT makes use of a series of BOX files containing compressed RHD simulation data. These can be found on the [afterglowlibrary](https://cosmo.nyu.edu/afterglowlibrary/boxfit2011.html) website. Download the files and store them on your local machine, e.g. under the boxfit/data directory
 
+To compile the code, set the appropriate paths in the makefile and run:
+```
+make clean boxfit
+```
+If compilation is successful, this will produce a binary file *boxfit* in the *boxfit/bin* directory.
 
 ### Running the code
+
+In the directory *boxfit/settings* the file *boxfitsettings.txt* can be found. Copy this file along with the binary to your local output directory. Update the settings file to point to the correct paths before running BOXFIT. More detailed instructions can be found in the pdf manual.
 
 ## Authors
 
