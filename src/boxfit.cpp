@@ -2471,35 +2471,15 @@ int c_boxfit :: initialize(int argc, char* argv[])
     return 1;
   }
 
-  if (flux.eds.ur_rays % 2 != 0)
-  {
-    if (myid == 0)
-    {
-      printf("ERROR: eds_r_res should be divisible by 2.\n");
-      fflush(stdout);
-    }
-    return 1;
-  }
-
   flux.eds.uphi_rays = int_from_parfile(parfilename, "eds_phi_res");
   if (parse("-eds_phi_res=", argc, argv)) // command line overrules
     parse_int("-eds_phi_res=", flux.eds.uphi_rays, argc, argv);
 
-  if (flux.eds.uphi_rays != 1 and flux.eds.uphi_rays % 2 != 0)
+  if (flux.eds.uphi_rays != 1 and flux.eds.uphi_rays % 10 != 0)
   {
     if (myid == 0)
     {
-      printf("ERROR: eds_phi_res should be 1 or divisible by 2.\n");
-      fflush(stdout);
-    }
-    return 1;
-  }
-
-  if (flux.eds.uphi_rays != 1 and flux.eds.uphi_rays % 5 != 0)
-  {
-    if (myid == 0)
-    {
-      printf("ERROR: eds_phi_res should be 1 or divisible by 5.\n");
+      printf("ERROR: eds_phi_res should be 1 or divisible by 10.\n");
       fflush(stdout);
     }
     return 1;

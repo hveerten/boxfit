@@ -652,22 +652,29 @@ double c_eds :: get_F_annulus(int iur)
         // ur^2 is the Jacobian for polar log r coordinates
 
     // off-axis observer
-    double h = PI / uphi_rays;
-    double F = 0.;
+    double h = PI / (uphi_rays - 1);
+    double F;
     int iuphi;
 
-    for (iuphi = 0; iuphi * 5 + 1 < uphi_rays; iuphi++)
-      F += 5. * h / 288. * (
-        19. * ray[iur][iuphi * 5].I +
-        75. * ray[iur][iuphi * 5 + 1].I +
-        50. * ray[iur][iuphi * 5 + 2].I +
-        50. * ray[iur][iuphi * 5 + 3].I +
-        75. * ray[iur][iuphi * 5 + 4].I +
-        19. * ray[iur][iuphi * 5 + 5].I);
+    // The loop implements a closed 6-point Newton-Cotes formula between 0 .. PI
+    // formula reference: http://mathworld.wolfram.com/Newton-CotesFormulas.html
+    F = -19. * ray[iur][0].I; // correct for overcounting
+    
+    for (iuphi = 0; iuphi < uphi_rays - 1; iuphi += 5)
+    {
+      F += 38. * ray[iur][iuphi].I +
+        75. * ray[iur][iuphi + 1].I +
+        50 * ray[iur][iuphi + 2].I
+        50 * ray[iur][iuphi + 3].I
+        75 * ray[iur][iuphi + 4].I;
+    }
+    F += 19. * ray[iur][iuphi]; // add outer closed boundary
+
+    F = F * 5. / 288. * h
 
     return 2 * F * ray[iur][0].ur * ray[iur][0].ur;
       // factor 2 to account for the u_phi half from PI to 2 PI
- 
+
   #else // LOCAL_SELF_ABSORPTION_ == DISABLED_
 
     // on-axis observer
@@ -680,39 +687,113 @@ double c_eds :: get_F_annulus(int iur)
         S = ray[iur][0].emdr / ray[iur][0].abdr;
         tau = ray[iur][0].abdr;
         return S * (1. - exp(-tau)) * 2 * PI * ray[iur][0].ur * ray[iur][0].ur;
+          // 2PI is the domain size in Phi
+          // ur^2 is the Jacobian for polar log r coordinates
       }
       else
         return ray[iur][0].emdr * (1. - 0.5 * ray[iur][0].abdr) * 2 * PI * 
           ray[iur][0].ur * ray[iur][0].ur;
+          // 2PI is the domain size in Phi
+          // ur^2 is the Jacobian for polar log r coordinates
     }
 
     // off-axis observer
-    double F = 0.;
-    double h = PI / uphi_rays;
+    double F, S, tau;
+    double h = PI / (uphi_rays - 1);
     int iuphi;
-    double S[6], tau[6], dF[6];
-    int i;
 
-    for (iuphi = 0; iuphi * 5 + 1 < uphi_rays; iuphi++)
+    // The loop implements a closed 6-point Newton-Cotes formula between 0..PI
+    // formula ref: http://mathworld.wolfram.com/Newton-CotesFormulas.html
+
+    // correct for overshooting
+    tau = ray[iur][0].abdr;
+    if (tau > 1e-3)
     {
-      for (i = 0; i < 6; i++)
-      {
-        tau[i] = ray[iur][iuphi * 5 + i].abdr;
-        if (tau[i] > 1e-3)
-        {
-          S[i] = ray[iur][iuphi * 5 + i].emdr / ray[iur][iuphi * 5 + i].abdr;
-          dF[i] = S[i] * (1. - exp(-tau[i]));
-        }
-        else
-        {
-          dF[i] = ray[iur][iuphi * 5 + i].emdr * (1. - 0.5 * tau[i]);
-        }
-      }
-
-      F += 5. * h / 288. * (19. * dF[0] + 75. * dF[1] + 50. * dF[2] + 
-        50. * dF[3] + 75. * dF[4] + 19. * dF[5] );
+      S = ray[iur][0].emdr / ray [iur][0].abdr;
+      F = - 19. * S * (1 - exp(-tau));
+    }
+    else
+    {
+      F = -19. * ray[iur][0].emdr * (1. - 0.5 * tau);
     }
 
+    for (iuphi = 0; iuphi < uphi_rays - 1; iuphi += 5)
+    {
+      // point 0
+      tau = ray[iur][iuphi].abdr;
+      if (tau > 1e-3)
+      {
+        S = ray[iur][iuphi].emdr / ray [iur][iuphi].abdr;
+        F += 38. * S * (1 - exp(-tau));
+      }
+      else
+      {
+        F += 38. * ray[iur][iuphi].emdr * (1. - 0.5 * tau);
+      }
+
+      // point 1
+      tau = ray[iur][iuphi + 1].abdr;
+      if (tau > 1e-3)
+      {
+        S = ray[iur][iuphi + 1].emdr / ray [iur][iuphi + 1].abdr;
+        F += 75. * S * (1 - exp(-tau));
+      }
+      else
+      {
+        F += 75. * ray[iur][iuphi + 1].emdr * (1. - 0.5 * tau);
+      }
+      
+      // point 2
+      tau = ray[iur][iuphi + 2].abdr;
+      if (tau > 1e-3)
+      {
+        S = ray[iur][iuphi + 2].emdr / ray [iur][iuphi + 2].abdr;
+        F += 50. * S * (1 - exp(-tau));
+      }
+      else
+      {
+        F += 50. * ray[iur][iuphi + 2].emdr * (1. - 0.5 * tau);
+      }
+
+      // point 3
+      tau = ray[iur][iuphi + 3].abdr;
+      if (tau > 1e-3)
+      {
+        S = ray[iur][iuphi + 3].emdr / ray [iur][iuphi + 3].abdr;
+        F += 50. * S * (1 - exp(-tau));
+      }
+      else
+      {
+        F += 50. * ray[iur][iuphi + 3].emdr * (1. - 0.5 * tau);
+      }
+
+      // point 4
+      tau = ray[iur][iuphi + 4].abdr;
+      if (tau > 1e-3)
+      {
+        S = ray[iur][iuphi + 4].emdr / ray [iur][iuphi + 4].abdr;
+        F += 75. * S * (1 - exp(-tau));
+      }
+      else
+      {
+        F += 75. * ray[iur][iuphi + 4].emdr * (1. - 0.5 * tau);
+      }
+    }
+    
+    // add the closed end boundary
+    tau = ray[iur][iuphi].abdr;
+    if (tau > 1e-3)
+    {
+      S = ray[iur][iuphi].emdr / ray [iur][iuphi].abdr;
+      F += 19. * S * (1 - exp(-tau));
+    }
+    else
+    {
+      F += 19. * ray[iur][iuphi].emdr * (1. - 0.5 * tau);
+    }
+
+    F = F * 5 / 288. * h;      
+      
     // include a factor 2 to add the other half (phi = PI .. 2PI), which mirrors
     // the first half (phi = 0.. PI)
     return 2. * F * ray[iur][0].ur * ray[iur][0].ur;
@@ -728,25 +809,37 @@ double c_eds :: get_F_annulus_lores_t(int iur)
 
     // on-axis observer
     if (uphi_rays == 1) 
-      return ray[iur][0].I_lores * PI * ray[iur][0].ur * ray[iur][0].ur;
+      return ray[iur][0].I_lores * 2 * PI * ray[iur][0].ur * ray[iur][0].ur;
+        // 2PI is the domain size in Phi
+        // ur^2 is the Jacobian for polar log r coordinates
 
     // off-axis observer
-    double h = PI / uphi_rays;
+    double h = PI / (uphi_rays - 1);
     double F = 0.;
     int iuphi;
 
-    for (iuphi = 0; iuphi * 5 + 1 < uphi_rays; iuphi++)
-      F += 5. * h / 288. * (
-        19. * ray[iur][iuphi * 5].I_lores +
-        75. * ray[iur][iuphi * 5 + 1].I_lores +
-        50. * ray[iur][iuphi * 5 + 2].I_lores +
-        50. * ray[iur][iuphi * 5 + 3].I_lores +
-        75. * ray[iur][iuphi * 5 + 4].I_lores +
-        19. * ray[iur][iuphi * 5 + 5].I_lores);
+    // The loop implements a closed 6-point Newton-Cotes formula between 0 .. PI
+    // formula reference: http://mathworld.wolfram.com/Newton-CotesFormulas.html
+    F = -19. * ray[iur][0].I_lores; // correct for overcounting
+    
+    for (iuphi = 0; iuphi < uphi_rays - 1; iuphi += 5)
+    {
+      F += 38. * ray[iur][iuphi].I_lores +
+        75. * ray[iur][iuphi + 1].I_lores +
+        50 * ray[iur][iuphi + 2].I_lores
+        50 * ray[iur][iuphi + 3].I_lores
+        75 * ray[iur][iuphi + 4].I_lores;
+    }
+    F += 19. * ray[iur][iuphi]; // add outer closed boundary
 
-    return F * ray[iur][0].ur * ray[iur][0].ur;
-  
+    F = F * 5. / 288. * h
+
+    return 2 * F * ray[iur][0].ur * ray[iur][0].ur;
+      // factor 2 to account for the u_phi half from PI to 2 PI
+
   #else // LOCAL_SELF_ABSORPTION_ == DISABLED_
+
+
 
     // on-axis observer
     if (uphi_rays == 1) 
@@ -757,42 +850,114 @@ double c_eds :: get_F_annulus_lores_t(int iur)
       {
         S = ray[iur][0].emdr_lores / ray[iur][0].abdr_lores;
         tau = ray[iur][0].abdr_lores;
-        return S * (1. - exp(-tau)) * PI * ray[iur][0].ur * ray[iur][0].ur;
+        return S * (1. - exp(-tau)) * 2 * PI * ray[iur][0].ur * ray[iur][0].ur;
+          // 2PI is the domain size in Phi
+          // ur^2 is the Jacobian for polar log r coordinates
       }
       else
-        return ray[iur][0].emdr_lores * 
-          (1. - 0.5 * ray[iur][0].abdr_lores) * PI * 
-          ray[iur][0].ur * ray[iur][0].ur;
+        return ray[iur][0].emdr_lores * (1. - 0.5 * ray[iur][0].abdr_lores) * 
+          2 * PI * ray[iur][0].ur * ray[iur][0].ur;
+          // 2PI is the domain size in Phi
+          // ur^2 is the Jacobian for polar log r coordinates
     }
 
     // off-axis observer
-    double F = 0.;
-    double h = PI / uphi_rays;
+    double F, S, tau;
+    double h = PI / (uphi_rays - 1);
     int iuphi;
-    double S[6], tau[6], dF[6];
-    int i;
 
-    for (iuphi = 0; iuphi * 5 + 1 < uphi_rays; iuphi++)
+    // The loop implements a closed 6-point Newton-Cotes formula between 0..PI
+    // formula ref: http://mathworld.wolfram.com/Newton-CotesFormulas.html
+
+    // correct for overshooting
+    tau = ray[iur][0].abdr_lores;
+    if (tau > 1e-3)
     {
-      for (i = 0; i < 6; i++)
-      {
-        tau[i] = ray[iur][iuphi * 5 + i].abdr_lores;
-        if (tau[i] > 1e-3)
-        {
-          S[i] = ray[iur][iuphi * 5 + i].emdr_lores / 
-            ray[iur][iuphi * 5 + i].abdr_lores;
-          dF[i] = S[i] * (1. - exp(-tau[i]));
-        }
-        else
-        {
-          dF[i] = ray[iur][iuphi * 5 + i].emdr_lores * (1. - 0.5 * tau[i]);
-        }
-      }
-
-      F += 5. * h / 288. * (19. * dF[0] + 75. * dF[1] + 50. * dF[2] + 
-        50. * dF[3] + 75. * dF[4] + 19. * dF[5] );
+      S = ray[iur][0].emdr_lores / ray [iur][0].abdr_lores;
+      F = - 19. * S * (1 - exp(-tau));
+    }
+    else
+    {
+      F = -19. * ray[iur][0].emdr_lores * (1. - 0.5 * tau);
     }
 
+    for (iuphi = 0; iuphi < uphi_rays - 1; iuphi += 5)
+    {
+      // point 0
+      tau = ray[iur][iuphi].abdr_lores;
+      if (tau > 1e-3)
+      {
+        S = ray[iur][iuphi].emdr_lores / ray [iur][iuphi].abdr_lores;
+        F += 38. * S * (1 - exp(-tau));
+      }
+      else
+      {
+        F += 38. * ray[iur][iuphi].emdr_lores * (1. - 0.5 * tau);
+      }
+
+      // point 1
+      tau = ray[iur][iuphi + 1].abdr_lores;
+      if (tau > 1e-3)
+      {
+        S = ray[iur][iuphi + 1].emdr_lores / ray [iur][iuphi + 1].abdr_lores;
+        F += 75. * S * (1 - exp(-tau));
+      }
+      else
+      {
+        F += 75. * ray[iur][iuphi + 1].emdr_lores * (1. - 0.5 * tau);
+      }
+      
+      // point 2
+      tau = ray[iur][iuphi + 2].abdr;
+      if (tau > 1e-3)
+      {
+        S = ray[iur][iuphi + 2].emdr_lores / ray [iur][iuphi + 2].abdr_lores;
+        F += 50. * S * (1 - exp(-tau));
+      }
+      else
+      {
+        F += 50. * ray[iur][iuphi + 2].emdr_lores * (1. - 0.5 * tau);
+      }
+
+      // point 3
+      tau = ray[iur][iuphi + 3].abdr_lores;
+      if (tau > 1e-3)
+      {
+        S = ray[iur][iuphi + 3].emdr_lores / ray [iur][iuphi + 3].abdr_lores;
+        F += 50. * S * (1 - exp(-tau));
+      }
+      else
+      {
+        F += 50. * ray[iur][iuphi + 3].emdr_lores * (1. - 0.5 * tau);
+      }
+
+      // point 4
+      tau = ray[iur][iuphi + 4].abdr_lores;
+      if (tau > 1e-3)
+      {
+        S = ray[iur][iuphi + 4].emdr_lores / ray [iur][iuphi + 4].abdr_lores;
+        F += 75. * S * (1 - exp(-tau));
+      }
+      else
+      {
+        F += 75. * ray[iur][iuphi + 4].emdr_lores * (1. - 0.5 * tau);
+      }
+    }
+    
+    // add the closed end boundary
+    tau = ray[iur][iuphi].abdr_lores;
+    if (tau > 1e-3)
+    {
+      S = ray[iur][iuphi].emdr_lores / ray [iur][iuphi].abdr_lores;
+      F += 19. * S * (1 - exp(-tau));
+    }
+    else
+    {
+      F += 19. * ray[iur][iuphi].emdr_lores * (1. - 0.5 * tau);
+    }
+
+    F = F * 5 / 288. * h;      
+      
     // include a factor 2 to add the other half (phi = PI .. 2PI), which mirrors
     // the first half (phi = 0.. PI)
     return 2. * F * ray[iur][0].ur * ray[iur][0].ur;
@@ -808,24 +973,34 @@ double c_eds :: get_F_annulus_lores_phi(int iur)
 
     // on-axis observer
     if (uphi_rays == 1) 
-      return ray[iur][0].I * PI * ray[iur][0].ur * ray[iur][0].ur;
+      return 2. * PI * ray[iur][0].I * ray[iur][0].ur * ray[iur][0].ur;
+        // 2PI is the domain size in Phi
+        // ur^2 is the Jacobian for polar log r coordinates
 
     // off-axis observer
-    double h = 2 * PI / uphi_rays; // note the increased step size
-    double F = 0.;
+    double h = 2 * PI / (uphi_rays - 1); // note increased stepsize
+    double F;
     int iuphi;
 
-    for (iuphi = 0; iuphi * 5 + 1 < uphi_rays; iuphi += 2)
-      F += 5. * h / 288. * (
-        19. * ray[iur][iuphi * 5].I +
-        75. * ray[iur][iuphi * 5 + 1].I +
-        50. * ray[iur][iuphi * 5 + 2].I +
-        50. * ray[iur][iuphi * 5 + 3].I +
-        75. * ray[iur][iuphi * 5 + 4].I +
-        19. * ray[iur][iuphi * 5 + 5].I);
+    // The loop implements a closed 6-point Newton-Cotes formula between 0 .. PI
+    // formula reference: http://mathworld.wolfram.com/Newton-CotesFormulas.html
+    F = -19. * ray[iur][0].I; // correct for overcounting
+    
+    for (iuphi = 0; iuphi < uphi_rays - 1; iuphi += 10)
+    {
+      F += 38. * ray[iur][iuphi].I +
+        75. * ray[iur][iuphi + 2].I +
+        50 * ray[iur][iuphi + 4].I
+        50 * ray[iur][iuphi + 6].I
+        75 * ray[iur][iuphi + 8].I;
+    }
+    F += 19. * ray[iur][iuphi]; // add outer closed boundary
 
-    return F * ray[iur][0].ur * ray[iur][0].ur;
-  
+    F = F * 5. / 288. * h
+
+    return 2 * F * ray[iur][0].ur * ray[iur][0].ur;
+      // factor 2 to account for the u_phi half from PI to 2 PI
+
   #else // LOCAL_SELF_ABSORPTION_ == DISABLED_
 
     // on-axis observer
@@ -837,43 +1012,117 @@ double c_eds :: get_F_annulus_lores_phi(int iur)
       {
         S = ray[iur][0].emdr / ray[iur][0].abdr;
         tau = ray[iur][0].abdr;
-        return S * (1. - exp(-tau)) * PI * ray[iur][0].ur * ray[iur][0].ur;
+        return S * (1. - exp(-tau)) * 2 * PI * ray[iur][0].ur * ray[iur][0].ur;
+          // 2PI is the domain size in Phi
+          // ur^2 is the Jacobian for polar log r coordinates
       }
       else
-        return ray[iur][0].emdr * (1. - 0.5 * ray[iur][0].abdr) * PI * 
+        return ray[iur][0].emdr * (1. - 0.5 * ray[iur][0].abdr) * 2 * PI * 
           ray[iur][0].ur * ray[iur][0].ur;
+          // 2PI is the domain size in Phi
+          // ur^2 is the Jacobian for polar log r coordinates
     }
 
     // off-axis observer
-    double F = 0.;
-    double h = 2 * PI / uphi_rays;
+    double F, S, tau;
+    double h = 2 * PI / (uphi_rays - 1);
     int iuphi;
-    double S[6], tau[6], dF[6];
-    int i;
 
-    for (iuphi = 0; iuphi * 5 + 1 < uphi_rays; iuphi += 2)
+    // The loop implements a closed 6-point Newton-Cotes formula between 0..PI
+    // formula ref: http://mathworld.wolfram.com/Newton-CotesFormulas.html
+
+    // correct for overshooting
+    tau = ray[iur][0].abdr;
+    if (tau > 1e-3)
     {
-      for (i = 0; i < 6; i++)
-      {
-        tau[i] = ray[iur][iuphi * 5 + i].abdr;
-        if (tau[i] > 1e-3)
-        {
-          S[i] = ray[iur][iuphi * 5 + i].emdr / ray[iur][iuphi * 5 + i].abdr;
-          dF[i] = S[i] * (1. - exp(-tau[i]));
-        }
-        else
-        {
-          dF[i] = ray[iur][iuphi * 5 + i].emdr * (1. - 0.5 * tau[i]);
-        }
-      }
-
-      F += 5. * h / 288. * (19. * dF[0] + 75. * dF[1] + 50. * dF[2] + 
-        50. * dF[3] + 75. * dF[4] + 19. * dF[5] );
+      S = ray[iur][0].emdr / ray [iur][0].abdr;
+      F = - 19. * S * (1 - exp(-tau));
+    }
+    else
+    {
+      F = -19. * ray[iur][0].emdr * (1. - 0.5 * tau);
     }
 
+    for (iuphi = 0; iuphi < uphi_rays - 1; iuphi += 10)
+    {
+      // point 0
+      tau = ray[iur][iuphi].abdr;
+      if (tau > 1e-3)
+      {
+        S = ray[iur][iuphi].emdr / ray [iur][iuphi].abdr;
+        F += 38. * S * (1 - exp(-tau));
+      }
+      else
+      {
+        F += 38. * ray[iur][iuphi].emdr * (1. - 0.5 * tau);
+      }
+
+      // point 1
+      tau = ray[iur][iuphi + 2].abdr;
+      if (tau > 1e-3)
+      {
+        S = ray[iur][iuphi + 2].emdr / ray [iur][iuphi + 2].abdr;
+        F += 75. * S * (1 - exp(-tau));
+      }
+      else
+      {
+        F += 75. * ray[iur][iuphi + 2].emdr * (1. - 0.5 * tau);
+      }
+      
+      // point 2
+      tau = ray[iur][iuphi + 4].abdr;
+      if (tau > 1e-3)
+      {
+        S = ray[iur][iuphi + 4].emdr / ray [iur][iuphi + 4].abdr;
+        F += 50. * S * (1 - exp(-tau));
+      }
+      else
+      {
+        F += 50. * ray[iur][iuphi + 4].emdr * (1. - 0.5 * tau);
+      }
+
+      // point 3
+      tau = ray[iur][iuphi + 6].abdr;
+      if (tau > 1e-3)
+      {
+        S = ray[iur][iuphi + 6].emdr / ray [iur][iuphi + 6].abdr;
+        F += 50. * S * (1 - exp(-tau));
+      }
+      else
+      {
+        F += 50. * ray[iur][iuphi + 6].emdr * (1. - 0.5 * tau);
+      }
+
+      // point 4
+      tau = ray[iur][iuphi + 8].abdr;
+      if (tau > 1e-3)
+      {
+        S = ray[iur][iuphi + 8].emdr / ray [iur][iuphi + 8].abdr;
+        F += 75. * S * (1 - exp(-tau));
+      }
+      else
+      {
+        F += 75. * ray[iur][iuphi + 8].emdr * (1. - 0.5 * tau);
+      }
+    }
+    
+    // add the closed end boundary
+    tau = ray[iur][iuphi].abdr;
+    if (tau > 1e-3)
+    {
+      S = ray[iur][iuphi].emdr / ray [iur][iuphi].abdr;
+      F += 19. * S * (1 - exp(-tau));
+    }
+    else
+    {
+      F += 19. * ray[iur][iuphi].emdr * (1. - 0.5 * tau);
+    }
+
+    F = F * 5 / 288. * h;      
+      
     // include a factor 2 to add the other half (phi = PI .. 2PI), which mirrors
     // the first half (phi = 0.. PI)
-    return 2 * F * ray[iur][0].ur * ray[iur][0].ur;
+    return 2. * F * ray[iur][0].ur * ray[iur][0].ur;
 
   #endif
 }
@@ -924,7 +1173,6 @@ double c_eds :: get_F_r_error()
   double h = (log(ur_max) - log(ur_min)) * 2. / (double) (ur_rays - 1);
 
   Flores = -19. * get_F_annulus(0); // start with overcounting correction
-  
   for (iur = 0; iur < ur_rays; iur += 10)
   {
     F += (38. * get_F_annulus(iur) +
@@ -951,21 +1199,30 @@ double c_eds :: get_F_phi_error()
   double F = get_total_flux();
 
   int iur;
-  double Flores = 0.;
-  double h = (log(ur_max) - log(ur_min)) / (double) ur_rays;
+  double F_lores = 0.;
+  double h = (log(ur_max) - log(ur_min)) / (double) (ur_rays - 1);
 
-  for (iur = 0; iur * 5 + 1 < ur_rays; iur++)
-    Flores += 5 * h / 288. * (
-      19. * get_F_annulus_lores_phi(iur * 5) +
-      75. * get_F_annulus_lores_phi(iur * 5 + 1) +
-      50. * get_F_annulus_lores_phi(iur * 5 + 2) +
-      50. * get_F_annulus_lores_phi(iur * 5 + 3) +
-      75. * get_F_annulus_lores_phi(iur * 5 + 4) +
-      19. * get_F_annulus_lores_phi(iur * 5 + 5));
-
-  Flores = (2.0 * Flores) * (1.0 + p_Obs->z) / (p_Obs->dL * p_Obs->dL);
+  // The loop implements a closed 6-point Newton-Cotes formula. However, since
+  // the EDS is assumed to cover more than the full area on the sky of the
+  // source, the outer domain limit intensity value is assumed zero.
+  // formula reference: http://mathworld.wolfram.com/Newton-CotesFormulas.html
   
-  return 2. * fabs((Flores - F) / (Flores + F + 1e-200));
+  F_lores = -19. * get_F_annulus_lores_phi(0); 
+    // start with correction for overcounting
+  for (iur = 0; iur < ur_rays; iur += 5)
+  {
+    F_lores += (38. * get_F_annulus_lores_phi(iur) +
+      75 * get_F_annulus_lores_phi(iur + 1) +
+      50 * get_F_annulus_lores_phi(iur + 2) +
+      50 * get_F_annulus_lores_phi(iur + 3) +
+      75 * get_F_annulus_lores_phi(iur + 4));
+  }
+  F_lores = F_lores * 5 / 288. * h; // apply scale factor and domain step size h
+  
+  // correct the flux for distance
+  F_lores = F_lores * (1.0 + p_Obs->z) / (p_Obs->dL * p_Obs->dL);
+  
+  return 2. * fabs((F_lores - F) / (F_lores + F + 1e-200));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -974,27 +1231,35 @@ double c_eds :: get_F_t_error()
 {
   // returns measure of error due to temporal resolution
   double F = get_total_flux();
-  
-  double Flores = 0.;
+
   int iur;
-  double h = (log(ur_max) - log(ur_min)) / (double) ur_rays;
+  double F_lores = 0.;
+  double h = (log(ur_max) - log(ur_min)) / (double) (ur_rays - 1);
 
-  for (iur = 0; iur * 5 + 1 < ur_rays; iur++)
-    Flores += 5 * h / 288. * (
-      19. * get_F_annulus_lores_t(iur * 5) +
-      75. * get_F_annulus_lores_t(iur * 5 + 1) +
-      50. * get_F_annulus_lores_t(iur * 5 + 2) +
-      50. * get_F_annulus_lores_t(iur * 5 + 3) +
-      75. * get_F_annulus_lores_t(iur * 5 + 4) +
-      19. * get_F_annulus_lores_t(iur * 5 + 5));
-
-  Flores = (2.0 * Flores) * (1.0 + p_Obs->z) / (p_Obs->dL * p_Obs->dL);
-
-  return 2. * fabs((Flores - F) / (Flores + F + 1e-200));
+  // The loop implements a closed 6-point Newton-Cotes formula. However, since
+  // the EDS is assumed to cover more than the full area on the sky of the
+  // source, the outer domain limit intensity value is assumed zero.
+  // formula reference: http://mathworld.wolfram.com/Newton-CotesFormulas.html
+  
+  F_lores = -19. * get_F_annulus_lores_t(0); 
+    // start with correction for overcounting
+  for (iur = 0; iur < ur_rays; iur += 5)
+  {
+    F_lores += (38. * get_F_annulus_lores_t(iur) +
+      75 * get_F_annulus_lores_t(iur + 1) +
+      50 * get_F_annulus_lores_t(iur + 2) +
+      50 * get_F_annulus_lores_t(iur + 3) +
+      75 * get_F_annulus_lores_t(iur + 4));
+  }
+  F_lores = F_lores * 5 / 288. * h; // apply scale factor and domain step size h
+  
+  // correct the flux for distance
+  F_lores = F_lores * (1.0 + p_Obs->z) / (p_Obs->dL * p_Obs->dL);
+  
+  return 2. * fabs((F_lores - F) / (F_lores + F + 1e-200));  
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// BEGIN CODE NOT PUBLIC
 
 void c_eds :: set_R()
 {
@@ -1028,7 +1293,6 @@ void c_eds :: set_R()
   }
 }
 
-// END CODE NOT PUBLIC
 ////////////////////////////////////////////////////////////////////////////////
 
 void c_eds :: reset()
