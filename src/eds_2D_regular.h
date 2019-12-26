@@ -114,6 +114,8 @@ class c_eds
 
   // output functions  
   double get_F_annulus(int iur);
+    // returns the total flux in the annulus at EDS iur'th radial position,
+    // for the full 0 .. 2PI angle domain of u_phi
   double get_F_annulus_lores_phi(int iur); // low resolution in uphi
   double get_F_annulus_lores_t(int iur); // low resolution in time
   double get_total_flux(); 

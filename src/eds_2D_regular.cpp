@@ -647,7 +647,9 @@ double c_eds :: get_F_annulus(int iur)
 
     // on-axis observer
     if (uphi_rays == 1) 
-      return ray[iur][0].I * PI * ray[iur][0].ur * ray[iur][0].ur;
+      return 2. * PI * ray[iur][0].I * ray[iur][0].ur * ray[iur][0].ur;
+        // 2PI is the domain size in Phi
+        // ur^2 is the Jacobian for polar log r coordinates
 
     // off-axis observer
     double h = PI / uphi_rays;
@@ -663,8 +665,9 @@ double c_eds :: get_F_annulus(int iur)
         75. * ray[iur][iuphi * 5 + 4].I +
         19. * ray[iur][iuphi * 5 + 5].I);
 
-    return F * ray[iur][0].ur * ray[iur][0].ur;
-  
+    return 2 * F * ray[iur][0].ur * ray[iur][0].ur;
+      // factor 2 to account for the u_phi half from PI to 2 PI
+ 
   #else // LOCAL_SELF_ABSORPTION_ == DISABLED_
 
     // on-axis observer
@@ -676,10 +679,10 @@ double c_eds :: get_F_annulus(int iur)
       {
         S = ray[iur][0].emdr / ray[iur][0].abdr;
         tau = ray[iur][0].abdr;
-        return S * (1. - exp(-tau)) * PI * ray[iur][0].ur * ray[iur][0].ur;
+        return S * (1. - exp(-tau)) * 2 * PI * ray[iur][0].ur * ray[iur][0].ur;
       }
       else
-        return ray[iur][0].emdr * (1. - 0.5 * ray[iur][0].abdr) * PI * 
+        return ray[iur][0].emdr * (1. - 0.5 * ray[iur][0].abdr) * 2 * PI * 
           ray[iur][0].ur * ray[iur][0].ur;
     }
 
@@ -880,7 +883,7 @@ double c_eds :: get_F_annulus_lores_phi(int iur)
 double c_eds :: get_total_flux()
 {
   int iur; // , iuphi;
-  double h = (log(ur_max) - log(ur_min)) / (double) ur_rays;
+  double h = (log(ur_max) - log(ur_min)) / (double) (ur_rays - 1);
 
   // Compute the flux by summing over the annuli. Since the radial coordinates
   // are logarithmically spaced, we can only use a higher-order method for
@@ -888,22 +891,21 @@ double c_eds :: get_total_flux()
   // integral then becomes Int r^2 I d u_phi d ln _ur in polar coordinates on
   // the EDS.
 
-  // this loop implements a 6-point closed formula for eqally spaced abscissas:
-  F = 0;
-  for (iur = 0; iur * 5 + 1 < ur_rays; iur++)
+  // The loop implements a closed 6-point Newton-Cotes formula. However, since
+  // the EDS is assumed to cover more than the full area on the sky of the
+  // source, the outer domain limit intensity value is assumed zero.
+  // formula reference: http://mathworld.wolfram.com/Newton-CotesFormulas.html
+  
+  F = -19. * get_F_annulus(0); // start with correction for overcounting
+  for (iur = 0; iur < ur_rays; iur += 5)
   {
-    F += 5 * h / 288. * (
-      19. * get_F_annulus(iur * 5) +
-      75. * get_F_annulus(iur * 5 + 1) +
-      50. * get_F_annulus(iur * 5 + 2) +
-      50. * get_F_annulus(iur * 5 + 3) +
-      75. * get_F_annulus(iur * 5 + 4) +
-      19. * get_F_annulus(iur * 5 + 5));
+    F += (38. * get_F_annulus(iur) +
+      75 * get_F_annulus(iur + 1) +
+      50 * get_F_annulus(iur + 2) +
+      50 * get_F_annulus(iur + 3) +
+      75 * get_F_annulus(iur + 4));
   }
-    // Note how this version is clumsily implemented and computes the edge
-    // values twice. The integral could be rewritten to fix that but the
-    // total integration takes a negible amount of time anyway compared
-    // to the full radiative transfer problem.
+  F = F * 5 / 288. * h; // apply scale factor and domain step size h
   
   // correct the flux for distance
   F = F * (1.0 + p_Obs->z) / (p_Obs->dL * p_Obs->dL);
@@ -917,21 +919,27 @@ double c_eds :: get_F_r_error()
 {
   // returns measure of error due to radial resolution
   double F = get_total_flux();
-  double Flores = 0.;
+  double Flores;
   int iur;
-  double h = (log(ur_max) - log(ur_min)) * 2. / (double) ur_rays;
+  double h = (log(ur_max) - log(ur_min)) * 2. / (double) (ur_rays - 1);
 
-  for (iur = 0; iur * 5 + 1 < ur_rays; iur += 2)
-    Flores += 5 * h / 288. * (
-      19. * get_F_annulus(iur * 5) +
-      75. * get_F_annulus(iur * 5 + 1) +
-      50. * get_F_annulus(iur * 5 + 2) +
-      50. * get_F_annulus(iur * 5 + 3) +
-      75. * get_F_annulus(iur * 5 + 4) +
-      19. * get_F_annulus(iur * 5 + 5));
-
-  Flores = (2.0 * Flores) * (1.0 + p_Obs->z) / (p_Obs->dL * p_Obs->dL);
+  Flores = -19. * get_F_annulus(0); // start with overcounting correction
   
+  for (iur = 0; iur < ur_rays; iur += 10)
+  {
+    F += (38. * get_F_annulus(iur) +
+      75 * get_F_annulus(iur + 2) +
+      50 * get_F_annulus(iur + 3) +
+      50 * get_F_annulus(iur + 6) +
+      75 * get_F_annulus(iur + 8));
+  }
+  F = F * 5 / 288. * h; // apply scale factor and domain step size h
+  
+  // correct the flux for distance
+  F = F * (1.0 + p_Obs->z) / (p_Obs->dL * p_Obs->dL);
+
+  // Flores = (2.0 * Flores) * (1.0 + p_Obs->z) / (p_Obs->dL * p_Obs->dL);
+    
   return 2. * fabs((Flores - F) / (Flores + F + 1e-200));
 }
 

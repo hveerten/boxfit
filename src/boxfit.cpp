@@ -2461,11 +2461,11 @@ int c_boxfit :: initialize(int argc, char* argv[])
   if (parse("-eds_r_res=", argc, argv)) // command line overrules
     parse_int("-eds_r_res=", flux.eds.ur_rays, argc, argv);
 
-  if (flux.eds.ur_rays % 5 != 0)
+  if (flux.eds.ur_rays % 10 != 0)
   {
     if (myid == 0)
     {
-      printf("ERROR: eds_r_res should be divisible by 5.\n");
+      printf("ERROR: eds_r_res should be divisible by 10.\n");
       fflush(stdout);
     }
     return 1;
@@ -2480,9 +2480,6 @@ int c_boxfit :: initialize(int argc, char* argv[])
     }
     return 1;
   }
-  // Because we integrate flux using a 6 point closed interval integrator, we 
-  // add one point (n points means n plus one boundaries)
-  flux.eds.ur_rays++;
 
   flux.eds.uphi_rays = int_from_parfile(parfilename, "eds_phi_res");
   if (parse("-eds_phi_res=", argc, argv)) // command line overrules
