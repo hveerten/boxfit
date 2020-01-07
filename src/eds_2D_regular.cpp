@@ -20,8 +20,8 @@ s_ray** c_eds :: ray;
 c_eds :: c_eds()
 {
   // set up initialization values for parameters
-  ur_rays = 768;
-  uphi_rays = 32;
+  ur_rays = 750;
+  uphi_rays = 31;
   memory_assigned = false;
   #if BOOST_ == ENABLED_
     boost = 1.0, boostsqr = 1.0, beta_sim = 0.0; // start with nonmoving grid
