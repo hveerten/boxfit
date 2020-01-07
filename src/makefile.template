@@ -19,8 +19,9 @@
 # GNU compiler parallel
 CXX = mpic++
 
-# Linker flags:
+# Linker flags (some example options):
 LDFLAGS = -L -L/usr/lib -lm -lhdf5 -lgomp
+#LDFLAGS = -L/usr/lib -lm -lhdf5_openmpi -lgomp
   # -L is directory with libraries, there exists a file libm.sl etc.
 
 # Compiler flags
@@ -36,8 +37,8 @@ CPPFLAGS = -I/usr/include/mpi -Wall -O0 -g -fopenmp
 
 SOURCE  = box.cpp boxfit.cpp BM.cpp \
   coords.cpp dump_box \
-  eds_2D_regular.cpp eds_IO_2D.cpp \
-  eds_IO_2D_regular.cpp extramath.cpp fluid.cpp fluid_special.cpp \
+  eds_2D_regular.cpp \
+  extramath.cpp fluid.cpp fluid_special.cpp \
   numerical.cpp param_IO.cpp \
   parse.cpp physics.cpp radiation.cpp
 
@@ -45,7 +46,7 @@ OBJECTS = ${SOURCE:.cpp=.o}
 
 ################################################################################
 
-BOXFIT_O = BM.o box.o boxfit.o coords.o eds_IO_2D_regular.o eds_2D_regular.o \
+BOXFIT_O = BM.o box.o boxfit.o coords.o eds_2D_regular.o \
   extramath.o fluid.o fluid_special.o flux.o flux_from_box.o numerical.o \
   observer.o param_IO.o parse.o physics.o radiation.o
 
