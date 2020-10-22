@@ -509,9 +509,11 @@ void c_simplex :: load(const char* filename)
   for (i_sim = 0; i_sim <= n; i_sim++)
   {
     for (i_var = 0; i_var < n; i_var++)
+    {
       err = fscanf(p_file, "%le, ", &x[i_sim][i_var]);
       if (err == 0)
        { printf("READ ERROR c_simplex_load()\n"); fflush(stdout); abort(); }
+    }
     err = fscanf(p_file, "%le\n", &y[i_sim]); // not used
     if (err == 0)
       { printf("READ ERROR c_simplex_load()\n"); fflush(stdout); abort(); }
