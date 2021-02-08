@@ -635,14 +635,23 @@ void c_box :: close()
   
       if (counterjet)
       {
-        delete[] pres_ctr;
-        delete[] dens_ctr;
-        delete[] eint_ctr;
-        delete[] velr_ctr;
-        delete[] veltheta_ctr;
-
-        delete[] r_ctr;
-        delete[] dr_ctr;
+        #if OPEN_MPI_ == DISABLED_
+          delete[] pres_ctr;
+          delete[] dens_ctr;
+          delete[] eint_ctr;
+          delete[] velr_ctr;
+          delete[] veltheta_ctr;
+          delete[] r_ctr;
+          delete[] dr_ctr;
+        #else
+          if (version >= 1.999) MPI_Win_free(&pres_ctrwin);
+          MPI_Win_free(&dens_ctrwin);
+          MPI_Win_free(&eint_ctrwin);
+          MPI_Win_free(&velr_ctrwin);
+          MPI_Win_free(&veltheta_ctrwin);
+          MPI_Win_free(&r_ctrwin);
+          MPI_Win_free(&dr_ctrwin);
+        #endif
         
         delete_array_1d(theta_max_ctr);
         delete_array_2d(R_max_ctr);
